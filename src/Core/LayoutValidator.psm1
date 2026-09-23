@@ -1,0 +1,50 @@
+Set-StrictMode -Version 2.0
+
+function Test-RectangleOverlap {
+    param($A,$B)
+    return ($A.X -lt ($B.X + $B.Width)) -and (($A.X + $A.Width) -gt $B.X) -and ($A.Y -lt ($B.Y + $B.Height)) -and (($A.Y + $A.Height) -gt $B.Y)
+}
+
+function Test-PbiLayout {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)]$Layout)
+
+    $errors = New-Object System.Collections.Generic.List[string]
+    $warnings = New-Object System.Collections.Generic.List[string]
+    $items = @($Layout.Items)
+
+    if ($Layout.PageWidth -le 0 -or $Layout.PageHeight -le 0) { $errors.Add('Page width and height must be positive.') }
+    if ($items.Count -eq 0) { $errors.Add('No supported visual items were supplied.') }
+
+    $ids = @{}
+    foreach ($item in $items) {
+        if ([string]::IsNullOrWhiteSpace([string]$item.Id)) { $errors.Add('A visual is missing its identifier.'); continue }
+        if ($ids.ContainsKey([string]$item.Id)) { $errors.Add(('Duplicate visual identifier: {0}' -f $item.Id)) } else { $ids[[string]$item.Id] = $true }
+        foreach ($name in @('X','Y','Width','Height')) {
+            $value = [double]$item.$name
+            if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) { $errors.Add(('{0}: {1} is not a finite number.' -f $item.Id,$name)) }
+        }
+        if ($item.X -lt 0 -or $item.Y -lt 0) { $errors.Add(('{0}: visual starts outside the page.' -f $item.Id)) }
+        if ($item.Width -le 0 -or $item.Height -le 0) { $errors.Add(('{0}: width/height must be positive.' -f $item.Id)) }
+        if (($item.X + $item.Width) -gt ($Layout.PageWidth + 0.01)) { $errors.Add(('{0}: visual exceeds page width.' -f $item.Id)) }
+        if (($item.Y + $item.Height) -gt ($Layout.PageHeight + 0.01)) { $errors.Add(('{0}: visual exceeds page height.' -f $item.Id)) }
+        if (-not (Test-Path -LiteralPath $item.FilePath -PathType Leaf)) { $errors.Add(('{0}: source visual.json no longer exists.' -f $item.Id)) }
+    }
+
+    for ($i=0; $i -lt $items.Count; $i++) {
+        for ($j=$i+1; $j -lt $items.Count; $j++) {
+            if (Test-RectangleOverlap -A $items[$i] -B $items[$j]) {
+                $errors.Add(('Overlap detected between {0} and {1}.' -f $items[$i].Id,$items[$j].Id))
+            }
+        }
+    }
+
+    [pscustomobject]@{
+        IsValid = ($errors.Count -eq 0)
+        Errors = @($errors)
+        Warnings = @($warnings)
+        VisualCount = $items.Count
+    }
+}
+
+Export-ModuleMember -Function Test-PbiLayout
