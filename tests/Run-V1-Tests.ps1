@@ -237,6 +237,32 @@ try {
     $validation = Test-PbiLayout -Layout $layout
     Assert-True $validation.IsValid 'Layout becomes valid again after source file is restored'
 
+    $changedItems = @($layout.Items | Where-Object { $_.Changed })
+
+    $readOnlyItem = Get-Item -LiteralPath $a
+    $readOnlyItem.IsReadOnly = $true
+    try {
+        Assert-Throws { Test-PbiWriteTargets -Items $changedItems | Out-Null } 'Read-only target is rejected during write preflight'
+    }
+    finally {
+        (Get-Item -LiteralPath $a).IsReadOnly = $false
+    }
+
+    $lockStream = [System.IO.File]::Open(
+        $a,
+        [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read,
+        [System.IO.FileShare]::None
+    )
+    try {
+        Assert-Throws { Test-PbiWriteTargets -Items $changedItems | Out-Null } 'Locked target is rejected during write preflight'
+    }
+    finally {
+        $lockStream.Dispose()
+    }
+
+    Assert-True (Test-PbiWriteTargets -Items $changedItems) 'Writable unlocked targets pass write preflight'
+
     $failureBackup = New-PbiBackup -ProjectRoot $project.ProjectRoot -Items $layout.Items -PageName $pages[0].DisplayName
     $failureOriginal = [System.IO.File]::ReadAllText($a)
     [System.IO.File]::WriteAllText($a,($failureOriginal + [Environment]::NewLine),(New-Object System.Text.UTF8Encoding($false)))
