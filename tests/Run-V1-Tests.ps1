@@ -160,6 +160,7 @@ try {
 
     Write-Host ''
     Write-Host ('SUCCESS — ' + $script:Passed + ' assertions passed.') -ForegroundColor Green
+    $script:TestSucceeded = $true
     exit 0
 }
 catch {
