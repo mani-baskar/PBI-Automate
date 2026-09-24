@@ -46,7 +46,7 @@ function Resolve-PbiProject {
         ReportFolder  = $reportFolder
         DefinitionDir = (Join-Path $reportFolder 'definition')
         PagesDir      = (Join-Path $reportFolder 'definition\pages')
-        ReportName    = ([IO.Path]::GetFileNameWithoutExtension($reportFolder) -replace '\.Report$','')
+        ReportName    = ([System.IO.Path]::GetFileNameWithoutExtension($reportFolder) -replace '\.Report$','')
     }
 }
 
