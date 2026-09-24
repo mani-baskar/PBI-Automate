@@ -2,6 +2,54 @@ Set-StrictMode -Version 2.0
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+function New-PBIAutomateIcon {
+    if (-not ('PBIAutomate.NativeMethods' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace PBIAutomate {
+    public static class NativeMethods {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyIcon(IntPtr handle);
+    }
+}
+'@
+    }
+
+    $bitmap = New-Object System.Drawing.Bitmap(32,32)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+    $background = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(31,41,55))
+    $accent = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(245,183,47))
+
+    try {
+        $graphics.Clear([System.Drawing.Color]::Transparent)
+        $graphics.FillEllipse($background,1,1,30,30)
+
+        # Simple analytics bars: intentionally generic and not a Microsoft/Power BI logo.
+        $graphics.FillRectangle($accent,7,18,4,7)
+        $graphics.FillRectangle($accent,14,13,4,12)
+        $graphics.FillRectangle($accent,21,7,4,18)
+
+        $handle = $bitmap.GetHicon()
+        try {
+            return ([System.Drawing.Icon]::FromHandle($handle).Clone())
+        }
+        finally {
+            [void][PBIAutomate.NativeMethods]::DestroyIcon($handle)
+        }
+    }
+    finally {
+        $accent.Dispose()
+        $background.Dispose()
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
+
 function Show-PBIAutomateMainForm {
     [CmdletBinding()]
     param(
@@ -22,7 +70,7 @@ function Show-PBIAutomateMainForm {
     $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
     $form.Font = New-Object System.Drawing.Font('Segoe UI',9)
     $form.BackColor = [System.Drawing.Color]::FromArgb(245,247,250)
-    $form.Icon = [System.Drawing.SystemIcons]::Information.Clone()
+    $form.Icon = New-PBIAutomateIcon
 
     $rootGrid = New-Object System.Windows.Forms.TableLayoutPanel
     $rootGrid.Dock='Fill'; $rootGrid.ColumnCount=1; $rootGrid.RowCount=4
