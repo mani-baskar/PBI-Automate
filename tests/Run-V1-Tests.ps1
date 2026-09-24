@@ -19,6 +19,7 @@ $sourceFiles = @(
     'src\Services\Alignment\Core\AlignmentAnalyzer.psm1',
     'src\Services\Alignment\Core\AlignmentLayoutEngine.psm1',
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
+    'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Core\BackupService.psm1',
     'src\Core\PBIRWriter.psm1',
     'src\Core\UndoService.psm1',
@@ -48,6 +49,7 @@ $modules = @(
     'src\Services\Alignment\Core\AlignmentAnalyzer.psm1',
     'src\Services\Alignment\Core\AlignmentLayoutEngine.psm1',
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
+    'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Services\Alignment\AlignmentService.psm1',
     'src\UI\PreviewCanvas.psm1',
     'src\UI\MainForm.psm1'
@@ -220,6 +222,44 @@ try {
     Assert-True ($null -ne $realServicePreview.Analysis) 'Alignment service facade returns analysis for checked-in PBIP'
     Assert-True ($null -ne $realServicePreview.Layout) 'Alignment service facade returns a proposed layout'
     Assert-True $realServicePreview.Validation.IsValid 'Current checked-in PBIP alignment proposal validates'
+
+    # Overlap pre-normalization: keep the earlier top-left visual stable,
+    # move the later overlapping visual to the nearest free slot, then let the
+    # normal Smart Align engine consume the normalized snapshot.
+    $overlapVisual1 = [pscustomobject]@{
+        Id='OverlapA'; ObjectName='OverlapA'; VisualType='card'; FilePath=$a; FileHash=(Get-FileHash -LiteralPath $a -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=10.0; Y=10.0; Width=120.0; Height=80.0; Right=130.0; Bottom=90.0; CenterX=70.0; CenterY=50.0
+    }
+    $overlapVisual2 = [pscustomobject]@{
+        Id='OverlapB'; ObjectName='OverlapB'; VisualType='card'; FilePath=$b; FileHash=(Get-FileHash -LiteralPath $b -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=80.0; Y=30.0; Width=120.0; Height=80.0; Right=200.0; Bottom=110.0; CenterX=140.0; CenterY=70.0
+    }
+    $overlapVisual3 = [pscustomobject]@{
+        Id='OverlapC'; ObjectName='OverlapC'; VisualType='barChart'; FilePath=$c; FileHash=(Get-FileHash -LiteralPath $c -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=220.0; Y=10.0; Width=150.0; Height=150.0; Right=370.0; Bottom=160.0; CenterX=295.0; CenterY=85.0
+    }
+    $overlapSnapshot = [pscustomobject]@{
+        Id='OverlapPage'; Name='OverlapPage'; DisplayName='Overlap Page'; Width=400.0; Height=300.0; PageFolder=$pageFolder;
+        Visuals=@($overlapVisual1,$overlapVisual2,$overlapVisual3)
+    }
+    $overlapInitial = Get-PbiLayoutAnalysis -PageSnapshot $overlapSnapshot
+    $overlapNormalized = Resolve-PbiSnapshotOverlaps -PageSnapshot $overlapSnapshot -InitialAnalysis $overlapInitial -Margin 5 -Gap 5
+    Assert-True $overlapNormalized.HadOverlaps 'Overlap pre-normalization detects source overlap'
+    Assert-True ($overlapNormalized.InitialOverlapPairCount -ge 1) 'Overlap pre-normalization reports source overlap pairs'
+    Assert-True $overlapNormalized.Resolved 'Overlap pre-normalization resolves source overlap before topology analysis'
+    Assert-True ($overlapNormalized.RemainingOverlapPairCount -eq 0) 'Overlap pre-normalization leaves zero overlapping pairs'
+    $normalizedA = @($overlapNormalized.Snapshot.Visuals | Where-Object { $_.Id -eq 'OverlapA' })[0]
+    $normalizedB = @($overlapNormalized.Snapshot.Visuals | Where-Object { $_.Id -eq 'OverlapB' })[0]
+    Assert-True ([Math]::Abs($normalizedA.X - 10) -le 0.01 -and [Math]::Abs($normalizedA.Y - 10) -le 0.01) 'Overlap pre-normalization keeps the earlier top-left visual stable'
+    Assert-True ([Math]::Abs($normalizedB.X - 80) -gt 0.01 -or [Math]::Abs($normalizedB.Y - 30) -gt 0.01) 'Overlap pre-normalization moves the later overlapping visual'
+    Assert-True ([Math]::Abs($normalizedB.OriginalX - 80) -le 0.01 -and [Math]::Abs($normalizedB.OriginalY - 30) -le 0.01) 'Virtual de-overlap preserves original PBIR geometry metadata'
+
+    $overlapService = Invoke-AlignmentPreview -PageSnapshot $overlapSnapshot -Config $config -Margin 5 -Gap 5
+    Assert-True ($overlapService.OverlapNormalization.InitialOverlapPairCount -ge 1) 'Alignment service runs de-overlap before Smart Align'
+    Assert-True $overlapService.Validation.IsValid 'Smart Align validates after source overlap normalization'
 
     # Visible grouped children are active visuals; only the group container is structural.
     $visibleGrouped = [pscustomobject]@{
