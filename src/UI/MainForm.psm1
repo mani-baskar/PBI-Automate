@@ -7,11 +7,12 @@ function Show-PBIAutomateMainForm {
     param([Parameter(Mandatory=$true)][string]$RootPath)
 
     [System.Windows.Forms.Application]::EnableVisualStyles()
+    $config = Get-PBIAutomateConfig -RootPath $RootPath
 
     $state = [pscustomobject]@{ Project=$null; Pages=@(); Page=$null; Snapshot=$null; Analysis=$null; Layout=$null; LastBackup=$null }
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = 'PBI Automate — V1 Smart Layout'
+    $form.Text = ('PBI Automate — V1 Smart Layout — ' + [string]$config.version)
     $form.StartPosition = 'CenterScreen'
     $form.MinimumSize = New-Object System.Drawing.Size(1080,720)
     $form.Size = New-Object System.Drawing.Size(1280,820)
@@ -29,7 +30,7 @@ function Show-PBIAutomateMainForm {
 
     $header = New-Object System.Windows.Forms.Panel; $header.Dock='Fill'; $header.Padding=New-Object System.Windows.Forms.Padding(14,12,14,8); $header.BackColor=[System.Drawing.Color]::White
     $rootGrid.Controls.Add($header,0,0)
-    $headerGrid = New-Object System.Windows.Forms.TableLayoutPanel; $headerGrid.Dock='Fill'; $headerGrid.ColumnCount=6; $headerGrid.RowCount=3
+    $headerGrid = New-Object System.Windows.Forms.TableLayoutPanel; $headerGrid.Dock='Fill'; $headerGrid.ColumnCount=6; $headerGrid.RowCount=4
     [void]$headerGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,110)))
     [void]$headerGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
     [void]$headerGrid.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,95)))
@@ -48,10 +49,11 @@ function Show-PBIAutomateMainForm {
     $headerGrid.Controls.Add((New-Label 'Detected Report'),0,1); $headerGrid.Controls.Add($lblReport,1,1); $headerGrid.SetColumnSpan($lblReport,5)
 
     $cmbPage=New-Object System.Windows.Forms.ComboBox; $cmbPage.Dock='Fill'; $cmbPage.DropDownStyle='DropDownList'; $cmbPage.DisplayMember='DisplayName'
-    $numMargin=New-Object System.Windows.Forms.NumericUpDown; $numMargin.Minimum=0; $numMargin.Maximum=500; $numMargin.Value=5; $numMargin.Dock='Fill'
-    $numGap=New-Object System.Windows.Forms.NumericUpDown; $numGap.Minimum=0; $numGap.Maximum=500; $numGap.Value=5; $numGap.Dock='Fill'
-    $cmbMode=New-Object System.Windows.Forms.ComboBox; $cmbMode.DropDownStyle='DropDownList'; $cmbMode.Dock='Fill'; [void]$cmbMode.Items.Add('Smart Align'); $cmbMode.SelectedIndex=0
+    $numMargin=New-Object System.Windows.Forms.NumericUpDown; $numMargin.Minimum=0; $numMargin.Maximum=500; $numMargin.Value=[decimal]$config.layout.margin; $numMargin.Dock='Fill'
+    $numGap=New-Object System.Windows.Forms.NumericUpDown; $numGap.Minimum=0; $numGap.Maximum=500; $numGap.Value=[decimal]$config.layout.gap; $numGap.Dock='Fill'
+    $cmbMode=New-Object System.Windows.Forms.ComboBox; $cmbMode.DropDownStyle='DropDownList'; $cmbMode.Dock='Fill'; [void]$cmbMode.Items.Add([string]$config.layout.mode); $cmbMode.SelectedIndex=0
     $headerGrid.Controls.Add((New-Label 'Page'),0,2); $headerGrid.Controls.Add($cmbPage,1,2); $headerGrid.Controls.Add((New-Label 'Margin'),2,2); $headerGrid.Controls.Add($numMargin,3,2); $headerGrid.Controls.Add((New-Label 'Gap'),4,2); $headerGrid.Controls.Add($numGap,5,2)
+$headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Add($cmbMode,1,3); $headerGrid.SetColumnSpan($cmbMode,2)
 
     $bodySplit=New-Object System.Windows.Forms.SplitContainer; $bodySplit.Dock='Fill'; $bodySplit.Orientation='Vertical'; $bodySplit.SplitterDistance=220; $bodySplit.FixedPanel='Panel1'
     $rootGrid.Controls.Add($bodySplit,0,1)
@@ -110,7 +112,7 @@ function Show-PBIAutomateMainForm {
         try {
             if ($null -eq $state.Snapshot) { throw 'Load a PBIP report and select a page first.' }
             Add-Activity 'Analyzing visual geometry...'
-            $state.Analysis = Get-PbiLayoutAnalysis -PageSnapshot $state.Snapshot
+            $state.Analysis = Get-PbiLayoutAnalysis -PageSnapshot $state.Snapshot -MinimumTolerance ([double]$config.layout.minimumTolerance) -MaximumTolerance ([double]$config.layout.maximumTolerance)
             $state.Layout = Get-SmartPbiLayout -Analysis $state.Analysis -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $validation = Test-PbiLayout -Layout $state.Layout
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After — '+$state.Layout.Columns+' cols × '+$state.Layout.Rows+' rows')
@@ -120,6 +122,16 @@ function Show-PBIAutomateMainForm {
         } catch { $btnApply.Enabled=$false; Show-Error $_.Exception.Message }
     }
 
+    $invalidateProposal = {
+        if ($null -ne $state.Layout) {
+            $state.Layout = $null
+            $btnApply.Enabled = $false
+            if ($null -ne $state.Snapshot) {
+                Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After — settings changed; preview again'
+                Add-Activity 'Layout settings changed. Preview again before Apply.'
+            }
+        }
+    }
     $btnPbip.Add_Click({
         $dlg=New-Object System.Windows.Forms.OpenFileDialog; $dlg.Filter='Power BI Project (*.pbip)|*.pbip|All files (*.*)|*.*'; $dlg.Title='Select Power BI Project'
         if ($dlg.ShowDialog($form) -eq [System.Windows.Forms.DialogResult]::OK) { & $loadProject $dlg.FileName }
@@ -132,6 +144,9 @@ function Show-PBIAutomateMainForm {
     })
     $txtPath.Add_KeyDown({ param($s,$e) if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Enter) { & $loadProject $txtPath.Text } })
     $cmbPage.Add_SelectedIndexChanged({ & $loadSelectedPage })
+    $numMargin.Add_ValueChanged({ & $invalidateProposal })
+    $numGap.Add_ValueChanged({ & $invalidateProposal })
+    $cmbMode.Add_SelectedIndexChanged({ & $invalidateProposal })
     $btnAnalyze.Add_Click({ & $analyze })
     $btnPreview.Add_Click({ & $analyze })
 
@@ -163,6 +178,7 @@ function Show-PBIAutomateMainForm {
             if (-not $postValidation.IsValid) { throw ('Post-write validation failed: '+($postValidation.Errors -join ' | ')) }
             Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Current — '+$state.Page.DisplayName)
             Write-PBIAutomateLog -Message ('Applied layout to '+$state.Page.DisplayName+'; files='+$write.ChangedCount+'; backup='+$state.LastBackup.Directory) | Out-Null
+            $state.Analysis=$null; $state.Layout=$null
             $btnApply.Enabled=$false
             Add-Activity 'Apply completed and verified. Reload/open Power BI Desktop to view the page.'
         } catch { Show-Error $_.Exception.Message }
