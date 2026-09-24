@@ -22,6 +22,7 @@ function Show-PBIAutomateMainForm {
     $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
     $form.Font = New-Object System.Drawing.Font('Segoe UI',9)
     $form.BackColor = [System.Drawing.Color]::FromArgb(245,247,250)
+    $form.Icon = [System.Drawing.SystemIcons]::Information.Clone()
 
     $rootGrid = New-Object System.Windows.Forms.TableLayoutPanel
     $rootGrid.Dock='Fill'; $rootGrid.ColumnCount=1; $rootGrid.RowCount=4
@@ -92,7 +93,17 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Pages = @(Get-PbiPages -ReportFolder $state.Project.ReportFolder)
             if ($state.Pages.Count -eq 0) { throw 'No report pages were found.' }
             $lblReport.Text = $state.Project.ReportFolder
-            $cmbPage.DataSource = $null; $cmbPage.DataSource = $state.Pages; $cmbPage.DisplayMember='DisplayName'
+            $cmbPage.DataSource = $null
+            $cmbPage.Items.Clear()
+
+            foreach ($pageItem in $state.Pages) {
+                $pageText = [string]$pageItem.DisplayName
+                if ([double]$pageItem.Width -gt 0 -and [double]$pageItem.Height -gt 0) {
+                    $pageText += (' ('+[int]$pageItem.Width+' x '+[int]$pageItem.Height+')')
+                }
+                [void]$cmbPage.Items.Add($pageText)
+            }
+
             $txtPath.Text = $path
             Add-Activity ('Loaded report: '+$state.Project.ReportName+' ('+$state.Pages.Count+' pages)')
             $cmbPage.SelectedIndex=0
@@ -101,8 +112,8 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
 
     $loadSelectedPage = {
         try {
-            if ($null -eq $cmbPage.SelectedItem) { return }
-            $state.Page = $cmbPage.SelectedItem
+            if ($cmbPage.SelectedIndex -lt 0 -or $cmbPage.SelectedIndex -ge $state.Pages.Count) { return }
+            $state.Page = $state.Pages[$cmbPage.SelectedIndex]
             $state.Snapshot = Get-PbiPageSnapshot -Page $state.Page
             $state.Analysis=$null; $state.Layout=$null; $btnApply.Enabled=$false
             Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Before - '+$state.Page.DisplayName)
@@ -119,7 +130,7 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Layout = Get-SmartPbiLayout -Analysis $state.Analysis -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $validation = Test-PbiLayout -Layout $state.Layout
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
-            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; '+$state.Layout.ChangedCount+' visuals would change; '+$state.Analysis.LockedVisualCount+' canvas-sized background/decorative visual(s) protected.')
+            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' topology columns, '+$state.Analysis.RowCount+' topology rows; drift tolerance X='+$state.Analysis.ColumnTolerance+', Y='+$state.Analysis.RowTolerance+'; '+$state.Layout.ChangedCount+' visuals would change; '+$state.Analysis.LockedVisualCount+' protected visual(s).')
             if ($validation.IsValid) { Add-Activity 'Proposed layout validation passed.'; $btnApply.Enabled=($state.Layout.ChangedCount -gt 0) }
             else { foreach ($err in $validation.Errors) { Add-Activity ('Validation: '+$err) }; $btnApply.Enabled=$false }
         } catch { $btnApply.Enabled=$false; Show-Error $_.Exception.Message }
