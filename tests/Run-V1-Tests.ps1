@@ -19,6 +19,7 @@ $sourceFiles = @(
     'src\Services\Alignment\Core\AlignmentAnalyzer.psm1',
     'src\Services\Alignment\Core\AlignmentLayoutEngine.psm1',
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
+    'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Core\BackupService.psm1',
     'src\Core\PBIRWriter.psm1',
     'src\Core\UndoService.psm1',
@@ -48,6 +49,7 @@ $modules = @(
     'src\Services\Alignment\Core\AlignmentAnalyzer.psm1',
     'src\Services\Alignment\Core\AlignmentLayoutEngine.psm1',
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
+    'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Services\Alignment\AlignmentService.psm1',
     'src\UI\PreviewCanvas.psm1',
     'src\UI\MainForm.psm1'
@@ -159,7 +161,7 @@ try {
     $header = New-TestVisual -PageFolder $pageFolder -Id 'Header.Visual' -X 0 -Y 0 -Width 400 -Height 40 -Type 'textbox'
 
     $groupContainer = Join-Path $pageFolder 'visuals\GroupContainer.Visual\visual.json'
-    Write-Utf8NoBom -Path $groupContainer -Content '{"name":"Group1","position":{"x":20,"y":60,"z":0,"height":180,"width":360,"tabOrder":10},"visualGroup":{"displayName":"Grouped Area","groupMode":0}}'
+    Write-Utf8NoBom -Path $groupContainer -Content '{"name":"Group1","position":{"x":20,"y":60,"z":0,"height":180,"width":360,"tabOrder":10},"isHidden":true,"visualGroup":{"displayName":"Grouped Area","groupMode":"ScaleMode"}}'
 
     $groupChild = Join-Path $pageFolder 'visuals\GroupChild.Visual\visual.json'
     Write-Utf8NoBom -Path $groupChild -Content '{"name":"GroupedChild","position":{"x":30,"y":70,"z":1,"height":80,"width":120,"tabOrder":11},"parentGroupName":"Group1","visual":{"visualType":"slicer"},"filterConfig":{"filters":[]}}'
@@ -221,6 +223,61 @@ try {
     Assert-True ($null -ne $realServicePreview.Layout) 'Alignment service facade returns a proposed layout'
     Assert-True $realServicePreview.Validation.IsValid 'Current checked-in PBIP alignment proposal validates'
 
+    # Overlap pre-normalization: keep the earlier top-left visual stable,
+    # move the later overlapping visual to the nearest free slot, then let the
+    # normal Smart Align engine consume the normalized snapshot.
+    $overlapVisual1 = [pscustomobject]@{
+        Id='OverlapA'; ObjectName='OverlapA'; VisualType='card'; FilePath=$a; FileHash=(Get-FileHash -LiteralPath $a -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=10.0; Y=10.0; Width=120.0; Height=80.0; Right=130.0; Bottom=90.0; CenterX=70.0; CenterY=50.0
+    }
+    $overlapVisual2 = [pscustomobject]@{
+        Id='OverlapB'; ObjectName='OverlapB'; VisualType='card'; FilePath=$b; FileHash=(Get-FileHash -LiteralPath $b -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=80.0; Y=30.0; Width=120.0; Height=80.0; Right=200.0; Bottom=110.0; CenterX=140.0; CenterY=70.0
+    }
+    $overlapVisual3 = [pscustomobject]@{
+        Id='OverlapC'; ObjectName='OverlapC'; VisualType='barChart'; FilePath=$c; FileHash=(Get-FileHash -LiteralPath $c -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=220.0; Y=10.0; Width=150.0; Height=150.0; Right=370.0; Bottom=160.0; CenterX=295.0; CenterY=85.0
+    }
+    $overlapSnapshot = [pscustomobject]@{
+        Id='OverlapPage'; Name='OverlapPage'; DisplayName='Overlap Page'; Width=400.0; Height=300.0; PageFolder=$pageFolder;
+        Visuals=@($overlapVisual1,$overlapVisual2,$overlapVisual3)
+    }
+    $overlapInitial = Get-PbiLayoutAnalysis -PageSnapshot $overlapSnapshot
+    $overlapNormalized = Resolve-PbiSnapshotOverlaps -PageSnapshot $overlapSnapshot -InitialAnalysis $overlapInitial -Margin 5 -Gap 5
+    Assert-True $overlapNormalized.HadOverlaps 'Overlap pre-normalization detects source overlap'
+    Assert-True ($overlapNormalized.InitialOverlapPairCount -ge 1) 'Overlap pre-normalization reports source overlap pairs'
+    Assert-True $overlapNormalized.Resolved 'Overlap pre-normalization resolves source overlap before topology analysis'
+    Assert-True ($overlapNormalized.RemainingOverlapPairCount -eq 0) 'Overlap pre-normalization leaves zero overlapping pairs'
+    $normalizedA = @($overlapNormalized.Snapshot.Visuals | Where-Object { $_.Id -eq 'OverlapA' })[0]
+    $normalizedB = @($overlapNormalized.Snapshot.Visuals | Where-Object { $_.Id -eq 'OverlapB' })[0]
+    Assert-True ([Math]::Abs($normalizedA.X - 10) -le 0.01 -and [Math]::Abs($normalizedA.Y - 10) -le 0.01) 'Overlap pre-normalization keeps the earlier top-left visual stable'
+    Assert-True ([Math]::Abs($normalizedB.X - 80) -gt 0.01 -or [Math]::Abs($normalizedB.Y - 30) -gt 0.01) 'Overlap pre-normalization moves the later overlapping visual'
+    Assert-True ([Math]::Abs($normalizedB.OriginalX - 80) -le 0.01 -and [Math]::Abs($normalizedB.OriginalY - 30) -le 0.01) 'Virtual de-overlap preserves original PBIR geometry metadata'
+
+    $overlapService = Invoke-AlignmentPreview -PageSnapshot $overlapSnapshot -Config $config -Margin 5 -Gap 5
+    Assert-True ($overlapService.OverlapNormalization.InitialOverlapPairCount -ge 1) 'Alignment service runs de-overlap before Smart Align'
+    Assert-True $overlapService.Validation.IsValid 'Smart Align validates after source overlap normalization'
+
+    # Visible grouped children are active visuals; only the group container is structural.
+    $visibleGrouped = [pscustomobject]@{
+        Id='VisibleGroupedChild'; ObjectName='VisibleGroupedChild'; VisualType='card'; FilePath=$a; FileHash=(Get-FileHash -LiteralPath $a -Algorithm SHA256).Hash;
+        ParentGroupName='VisibleGroup'; IsVisualGroup=$false; GroupMode=''; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=20.0; Y=20.0; Width=120.0; Height=80.0; Right=140.0; Bottom=100.0; CenterX=80.0; CenterY=60.0
+    }
+    $visibleGroupContainer = [pscustomobject]@{
+        Id='VisibleGroup'; ObjectName='VisibleGroup'; VisualType='visualGroup'; FilePath=$groupContainer; FileHash=(Get-FileHash -LiteralPath $groupContainer -Algorithm SHA256).Hash;
+        ParentGroupName=''; IsVisualGroup=$true; GroupMode='ScaleMode'; IsHidden=$false; EffectiveHidden=$false; HiddenReason='';
+        X=0.0; Y=0.0; Width=300.0; Height=200.0; Right=300.0; Bottom=200.0; CenterX=150.0; CenterY=100.0
+    }
+    $visibleGroupSnapshot = [pscustomobject]@{ Width=400.0; Height=300.0; Visuals=@($visibleGroupContainer,$visibleGrouped) }
+    $visibleGroupAnalysis = Get-PbiLayoutAnalysis -PageSnapshot $visibleGroupSnapshot
+    Assert-True ($visibleGroupAnalysis.ManagedVisualCount -eq 1) 'Visible grouped child participates in alignment'
+    Assert-True ($visibleGroupAnalysis.ActiveGroupedVisualCount -eq 1) 'Visible grouped child count is reported'
+    Assert-True ($visibleGroupAnalysis.GroupContainerCount -eq 1) 'Visible group container is ignored as structure'
+
     # Synthetic anchor-priority case: top is the primary width anchor and
     # left is the primary height anchor when original dimensions differ only slightly.
     $anchorItems = @(
@@ -269,13 +326,20 @@ try {
     $readChild = @($snapshot.Visuals | Where-Object { $_.Id -eq 'GroupChild.Visual' })[0]
     $readHidden = @($snapshot.Visuals | Where-Object { $_.Id -eq 'Hidden.Visual' })[0]
     Assert-True ($readGroup.IsVisualGroup -and $readGroup.VisualType -eq 'visualGroup') 'visualGroup container is detected'
+    Assert-True ($readGroup.ObjectName -eq 'Group1' -and $readGroup.GroupMode -eq 'ScaleMode') 'visualGroup name and group mode are read'
     Assert-True ($readChild.ParentGroupName -eq 'Group1') 'parentGroupName is read for grouped child'
+    Assert-True $readGroup.EffectiveHidden 'Hidden visualGroup is effectively hidden'
+    Assert-True ($readChild.EffectiveHidden -and $readChild.HiddenReason -like 'AncestorGroup:*') 'Child of hidden visualGroup inherits hidden state'
     Assert-True $readHidden.IsHidden 'Root-level isHidden state is read'
+    $activeSnapshotVisuals = @(Get-PbiActivePageVisuals -PageSnapshot $snapshot)
+    Assert-True ($activeSnapshotVisuals.Count -eq 5) 'Active visual helper excludes hidden visuals, hidden-group children, and group containers'
     Assert-True ($snapshot.Width -eq 400 -and $snapshot.Height -eq 300) 'Page canvas size is read'
 
     $analysis = Get-PbiLayoutAnalysis -PageSnapshot $snapshot
-    Assert-True ($analysis.LockedVisualCount -eq 5) 'Background, structural header, visualGroup, grouped child, and hidden visual are protected from Smart Align'
-    Assert-True ($analysis.ManagedVisualCount -eq 3) 'Only content visuals participate in row/column detection'
+    Assert-True ($analysis.LockedVisualCount -eq 2) 'Only visible structural background/header visuals remain protected'
+    Assert-True ($analysis.HiddenVisualCount -eq 3) 'Hidden visual, hidden group, and inherited-hidden child are ignored'
+    Assert-True ($analysis.GroupContainerCount -eq 1) 'Group container count is reported separately'
+    Assert-True ($analysis.ManagedVisualCount -eq 3) 'Only active content visuals participate in row/column detection'
     Assert-True ($analysis.ReservedTop -eq 40) 'Top structural header reserves its occupied region'
     Assert-True ($analysis.ColumnCount -eq 2) 'Rough X positions collapse into two columns'
     Assert-True ($analysis.RowCount -eq 2) 'Rough Y positions collapse into two rows'
@@ -291,9 +355,8 @@ try {
     $lockedHeader = @($layout.Items | Where-Object { $_.Id -eq 'Header.Visual' })[0]
     Assert-True ($lockedHeader.IsLocked -and -not $lockedHeader.Changed) 'Wide structural textbox header remains unchanged in the proposal'
     Assert-True ($lockedHeader.Width -eq 400 -and $lockedHeader.Height -eq 40) 'Structural header geometry is preserved exactly'
-    Assert-True (@($layout.Items | Where-Object { $_.IsVisualGroup -and $_.IsLocked }).Count -eq 1) 'visualGroup container remains locked in proposal'
-    Assert-True (@($layout.Items | Where-Object { $_.ParentGroupName -eq 'Group1' -and $_.IsLocked }).Count -eq 1) 'Grouped child remains locked in proposal'
-    Assert-True (@($layout.Items | Where-Object { $_.IsHidden -and $_.IsLocked }).Count -eq 1) 'Hidden visual remains locked in proposal'
+    Assert-True (@($layout.Items | Where-Object { $_.IsVisualGroup }).Count -eq 0) 'Group containers are excluded from alignment proposal'
+    Assert-True (@($layout.Items | Where-Object { $_.EffectiveHidden }).Count -eq 0) 'Hidden visuals are excluded from alignment proposal'
     Assert-True ($layout.Columns -eq 2 -and $layout.Rows -eq 2) 'Layout keeps the detected two-by-two structure'
     Assert-True ($layout.ContentTop -eq 45) 'Smart Align starts content after header plus configured 5-unit gap'
     Assert-True (@($layout.Items | Where-Object { -not $_.IsLocked -and $_.Y -lt 45 }).Count -eq 0) 'No managed visual is placed inside the reserved header region'

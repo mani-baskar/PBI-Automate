@@ -113,7 +113,12 @@ function New-ProposedItem {
         $ProtectionReason = $null
     )
 
-    $oldArea = [double]$Item.Width * [double]$Item.Height
+    $oldX = $(if ($Item.PSObject.Properties.Name -contains 'OriginalX') { [double]$Item.OriginalX } else { [double]$Item.X })
+    $oldY = $(if ($Item.PSObject.Properties.Name -contains 'OriginalY') { [double]$Item.OriginalY } else { [double]$Item.Y })
+    $oldWidth = $(if ($Item.PSObject.Properties.Name -contains 'OriginalWidth') { [double]$Item.OriginalWidth } else { [double]$Item.Width })
+    $oldHeight = $(if ($Item.PSObject.Properties.Name -contains 'OriginalHeight') { [double]$Item.OriginalHeight } else { [double]$Item.Height })
+
+    $oldArea = $oldWidth * $oldHeight
     $newArea = $Width * $Height
     $areaChangePercent = 0.0
 
@@ -129,11 +134,12 @@ function New-ProposedItem {
         ParentGroupName = $Item.ParentGroupName
         IsVisualGroup = $Item.IsVisualGroup
         IsHidden = $Item.IsHidden
+        EffectiveHidden = $(if ($Item.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$Item.EffectiveHidden } else { [bool]$Item.IsHidden })
         ProtectionReason = $ProtectionReason
-        OldX = [double]$Item.X
-        OldY = [double]$Item.Y
-        OldWidth = [double]$Item.Width
-        OldHeight = [double]$Item.Height
+        OldX = $oldX
+        OldY = $oldY
+        OldWidth = $oldWidth
+        OldHeight = $oldHeight
         OriginalArea = [Math]::Round($oldArea,3)
         ProposedArea = [Math]::Round($newArea,3)
         AreaChangePercent = [Math]::Round($areaChangePercent,2)
@@ -149,10 +155,10 @@ function New-ProposedItem {
         AllowOverlap = $AllowOverlap
         Changed = (
             -not $IsLocked -and (
-                [Math]::Abs([double]$Item.X - $X) -gt 0.001 -or
-                [Math]::Abs([double]$Item.Y - $Y) -gt 0.001 -or
-                [Math]::Abs([double]$Item.Width - $Width) -gt 0.001 -or
-                [Math]::Abs([double]$Item.Height - $Height) -gt 0.001
+                [Math]::Abs($oldX - $X) -gt 0.001 -or
+                [Math]::Abs($oldY - $Y) -gt 0.001 -or
+                [Math]::Abs($oldWidth - $Width) -gt 0.001 -or
+                [Math]::Abs($oldHeight - $Height) -gt 0.001
             )
         )
     }
