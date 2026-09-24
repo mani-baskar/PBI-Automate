@@ -119,18 +119,21 @@ function New-TestVisual {
 $fixtureRoot = Join-Path $env:TEMP ('PBI-Automate-V1-Test-' + [Guid]::NewGuid().ToString('N'))
 $projectRoot = Join-Path $fixtureRoot 'Demo'
 $reportFolder = Join-Path $projectRoot 'Demo.Report'
-$pageFolder = Join-Path $reportFolder 'definition\pages\Page1'
+$pageFolder = Join-Path $reportFolder 'definition\pages\Friendly.Page'
+$page2Folder = Join-Path $reportFolder 'definition\pages\Other.Page'
 
 try {
     New-Item -ItemType Directory -Path $pageFolder -Force | Out-Null
+    New-Item -ItemType Directory -Path $page2Folder -Force | Out-Null
     Write-Utf8NoBom -Path (Join-Path $projectRoot 'Demo.pbip') -Content '{}'
     Write-Utf8NoBom -Path (Join-Path $reportFolder 'definition.pbir') -Content '{}'
-    Write-Utf8NoBom -Path (Join-Path $reportFolder 'definition\pages\pages.json') -Content '{"pageOrder":["Page1"],"activePageName":"Page1"}'
-    Write-Utf8NoBom -Path (Join-Path $pageFolder 'page.json') -Content '{"name":"Page1","displayName":"Executive Summary","width":400,"height":300}'
+    Write-Utf8NoBom -Path (Join-Path $reportFolder 'definition\pages\pages.json') -Content '{"pageOrder":["Page1","Page2"],"activePageName":"Page1"}'
+    Write-Utf8NoBom -Path (Join-Path $pageFolder 'page.json') -Content '{"name":"Page1","displayName":"Executive Summary","displayOption":"FitToPage","width":400,"height":300}'
+    Write-Utf8NoBom -Path (Join-Path $page2Folder 'page.json') -Content '{"name":"Page2","displayName":"Other Page","displayOption":"FitToPage","width":400,"height":300}'
 
-    $a = New-TestVisual -PageFolder $pageFolder -Id 'VisualA' -X 7 -Y 8 -Width 184 -Height 130 -Type 'card'
-    $b = New-TestVisual -PageFolder $pageFolder -Id 'VisualB' -X 204 -Y 11 -Width 188 -Height 127 -Type 'card'
-    $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC' -X 9 -Y 151 -Width 383 -Height 140 -Type 'barChart'
+    $a = New-TestVisual -PageFolder $pageFolder -Id 'VisualA.Visual' -X 7.25 -Y 8.5 -Width 184.75 -Height 130.25 -Type 'card'
+    $b = New-TestVisual -PageFolder $pageFolder -Id 'VisualB.Visual' -X 204.4 -Y 11.2 -Width 188.1 -Height 127.6 -Type 'card'
+    $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC.Visual' -X 9.1 -Y 151.35 -Width 383.2 -Height 140.4 -Type 'barChart'
 
     $originalHash = @{}
     foreach ($path in @($a,$b,$c)) {
@@ -155,8 +158,11 @@ try {
     Assert-True ($resolvedActual -ieq $resolvedExpected) 'PBIP project resolves its enhanced .Report folder'
 
     $pages = @(Get-PbiPages -ReportFolder $project.ReportFolder)
-    Assert-True ($pages.Count -eq 1) 'Exactly one page is discovered'
-    Assert-True ($pages[0].DisplayName -eq 'Executive Summary') 'Page display name is read'
+    Assert-True ($pages.Count -eq 2) 'Two pages are discovered'
+    Assert-True ($pages[0].DisplayName -eq 'Executive Summary' -and $pages[1].DisplayName -eq 'Other Page') 'pages.json order is respected using page.json names'
+    Assert-True ($pages[0].Id -eq 'Friendly.Page' -and $pages[0].Name -eq 'Page1') 'Friendly .Page folder can differ from page.json name'
+    $directReport = Resolve-PbiProject -Path $reportFolder
+    Assert-True ((Get-Item -LiteralPath $directReport.ReportFolder).FullName -ieq $resolvedExpected) 'Direct .Report folder selection resolves correctly'
 
     $snapshot = Get-PbiPageSnapshot -Page $pages[0]
     Assert-True ($snapshot.Visuals.Count -eq 3) 'Three supported visuals are read'
@@ -166,7 +172,7 @@ try {
     Assert-True ($analysis.ColumnCount -eq 2) 'Rough X positions collapse into two columns'
     Assert-True ($analysis.RowCount -eq 2) 'Rough Y positions collapse into two rows'
 
-    $wide = @($analysis.Items | Where-Object { $_.Id -eq 'VisualC' })[0]
+    $wide = @($analysis.Items | Where-Object { $_.Id -eq 'VisualC.Visual' })[0]
     Assert-True ($wide.ColumnSpan -eq 2) 'Wide visual is detected as a two-column span'
 
     $layout = Get-SmartPbiLayout -Analysis $analysis -Margin 5 -Gap 5
