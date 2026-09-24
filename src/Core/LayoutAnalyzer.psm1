@@ -47,7 +47,7 @@ function Get-PbiLayoutAnalysis {
         $rowSpan=1; if ($medianHeight -gt 0) { $rowSpan=[Math]::Max(1,[int][Math]::Round($v.Height/$medianHeight)) }
         if ($columnClusters.Count -gt 0) { $colSpan=[Math]::Min($colSpan,$columnClusters.Count-$col) }
         if ($rowClusters.Count -gt 0) { $rowSpan=[Math]::Min($rowSpan,$rowClusters.Count-$row) }
-        $items += [pscustomobject]@{ Id=$v.Id; VisualType=$v.VisualType; FilePath=$v.FilePath; X=$v.X; Y=$v.Y; Width=$v.Width; Height=$v.Height; Column=$col; Row=$row; ColumnSpan=[Math]::Max(1,$colSpan); RowSpan=[Math]::Max(1,$rowSpan); IsLarge=(($v.Width -gt ($medianWidth*1.6)) -or ($v.Height -gt ($medianHeight*1.6))) }
+        $items += [pscustomobject]@{ Id=$v.Id; VisualType=$v.VisualType; FilePath=$v.FilePath; SourceHash=$v.FileHash; X=$v.X; Y=$v.Y; Width=$v.Width; Height=$v.Height; Column=$col; Row=$row; ColumnSpan=[Math]::Max(1,$colSpan); RowSpan=[Math]::Max(1,$rowSpan); IsLarge=(($v.Width -gt ($medianWidth*1.6)) -or ($v.Height -gt ($medianHeight*1.6))) }
     }
     [pscustomobject]@{ PageWidth=[double]$PageSnapshot.Width; PageHeight=[double]$PageSnapshot.Height; VisualCount=$visuals.Count; MedianWidth=$medianWidth; MedianHeight=$medianHeight; ColumnTolerance=$xTolerance; RowTolerance=$yTolerance; ColumnCount=[Math]::Max(1,$columnClusters.Count); RowCount=[Math]::Max(1,$rowClusters.Count); ColumnStarts=@($columnClusters | ForEach-Object { $_.Center }); RowStarts=@($rowClusters | ForEach-Object { $_.Center }); Items=$items }
 }
