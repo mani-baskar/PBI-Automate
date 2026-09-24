@@ -9,6 +9,7 @@ Branch: `dev/v1-smart-layout`
 - [x] Portable Windows PowerShell 5.1 launcher
 - [x] WinForms desktop UI
 - [x] PBIP / project folder / .Report folder discovery
+- [x] PBIP artifacts[].report.path resolution when multiple report folders exist
 - [x] Enhanced PBIR validation
 - [x] Page discovery and display names
 - [x] Visual geometry reader
@@ -44,6 +45,7 @@ Latest expanded test coverage includes:
 - PowerShell syntax parsing for all source files
 - core/UI module import
 - WinForms preview control creation
+- Full WinForms window construction
 - default configuration
 - PBIP discovery
 - page reading
@@ -57,10 +59,12 @@ Latest expanded test coverage includes:
 - geometry write
 - preservation of non-geometry payload
 - written-coordinate verification
+- automatic rollback after failed writes
+- post-apply hash protection before Undo
 - byte-for-byte Undo restore
 - temporary-file cleanup
 
-Current expanded suite result: **38 assertions passed on Windows PowerShell 5.1**.
+Current expanded suite result: **52 assertions passed on Windows PowerShell 5.1**.
 
 ## Release blockers
 
