@@ -201,6 +201,10 @@ function Copy-AlignmentSnapshotVisual {
         IsHidden = $Visual.IsHidden
         EffectiveHidden = $(if ($Visual.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$Visual.EffectiveHidden } else { [bool]$Visual.IsHidden })
         HiddenReason = $(if ($Visual.PSObject.Properties.Name -contains 'HiddenReason') { $Visual.HiddenReason } else { '' })
+        OriginalX = $(if ($Visual.PSObject.Properties.Name -contains 'OriginalX') { [double]$Visual.OriginalX } else { [double]$Visual.X })
+        OriginalY = $(if ($Visual.PSObject.Properties.Name -contains 'OriginalY') { [double]$Visual.OriginalY } else { [double]$Visual.Y })
+        OriginalWidth = $(if ($Visual.PSObject.Properties.Name -contains 'OriginalWidth') { [double]$Visual.OriginalWidth } else { [double]$Visual.Width })
+        OriginalHeight = $(if ($Visual.PSObject.Properties.Name -contains 'OriginalHeight') { [double]$Visual.OriginalHeight } else { [double]$Visual.Height })
         X = [Math]::Round($X,3)
         Y = [Math]::Round($Y,3)
         Width = [Math]::Round($Width,3)
