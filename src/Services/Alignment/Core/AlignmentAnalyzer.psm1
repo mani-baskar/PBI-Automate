@@ -389,7 +389,8 @@ function Get-PbiLayoutAnalysis {
         ManagedVisualCount = $visuals.Count
         LockedVisualCount = $locked.Count
         HiddenVisualCount = $ignoredHidden.Count
-        GroupContainerCount = $ignoredGroups.Count
+        GroupContainerCount = @($allVisuals | Where-Object { $_.PSObject.Properties.Name -contains 'IsVisualGroup' -and [bool]$_.IsVisualGroup }).Count
+        VisibleGroupContainerCount = $ignoredGroups.Count
         ActiveGroupedVisualCount = @($visuals | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.ParentGroupName) }).Count
         ReservedLeft = $reservedLeft
         ReservedTop = $reservedTop
