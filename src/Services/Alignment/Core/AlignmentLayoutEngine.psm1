@@ -445,6 +445,83 @@ function Get-AreaPreservingPbiLayout {
     }
 }
 
+function Get-RegionPreservingPbiLayout {
+    param(
+        [Parameter(Mandatory=$true)]$Analysis,
+        [Parameter(Mandatory=$true)][double]$ContentLeft,
+        [Parameter(Mandatory=$true)][double]$ContentTop,
+        [Parameter(Mandatory=$true)][double]$ContentRight,
+        [Parameter(Mandatory=$true)][double]$ContentBottom,
+        [Parameter(Mandatory=$true)][double]$Gap,
+        [Parameter(Mandatory=$true)][double]$Margin
+    )
+
+    $managed = @($Analysis.Items | Where-Object { -not ($_.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$_.IsLocked) })
+    $locked = @($Analysis.Items | Where-Object { $_.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$_.IsLocked })
+    if ($managed.Count -eq 0) { return $null }
+
+    $minX = [double](($managed | Measure-Object -Property X -Minimum).Minimum)
+    $minY = [double](($managed | Measure-Object -Property Y -Minimum).Minimum)
+    $maxRight = [double](($managed | ForEach-Object { [double]$_.X + [double]$_.Width } | Measure-Object -Maximum).Maximum)
+    $maxBottom = [double](($managed | ForEach-Object { [double]$_.Y + [double]$_.Height } | Measure-Object -Maximum).Maximum)
+    $sourceWidth = $maxRight - $minX
+    $sourceHeight = $maxBottom - $minY
+    $contentWidth = $ContentRight - $ContentLeft
+    $contentHeight = $ContentBottom - $ContentTop
+    if ($sourceWidth -le 0 -or $sourceHeight -le 0 -or $contentWidth -le 0 -or $contentHeight -le 0) { return $null }
+
+    $scaleX = [Math]::Min(($contentWidth / $sourceWidth),1.08)
+    $scaleY = [Math]::Min(($contentHeight / $sourceHeight),1.08)
+    if ($scaleX -le 0 -or $scaleY -le 0) { return $null }
+
+    $proposed = @()
+    foreach ($item in $managed) {
+        $x = $ContentLeft + (([double]$item.X - $minX) * $scaleX)
+        $y = $ContentTop + (([double]$item.Y - $minY) * $scaleY)
+        $width = [double]$item.Width * $scaleX
+        $height = [double]$item.Height * $scaleY
+        $proposed += New-ProposedItem -Item $item -X $x -Y $y -Width $width -Height $height -Column ([int]$item.Column) -Row ([int]$item.Row) -ColumnSpan ([int]$item.ColumnSpan) -RowSpan ([int]$item.RowSpan)
+    }
+
+    foreach ($item in $locked) {
+        $reason = $null
+        if ($item.PSObject.Properties.Name -contains 'ProtectionReason') { $reason = $item.ProtectionReason }
+        $proposed += New-ProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -Column 0 -Row 0 -ColumnSpan 1 -RowSpan 1 -IsLocked $true -AllowOverlap ([bool]$item.AllowOverlap) -ProtectionReason $reason
+    }
+
+    $originalAreaTotal = 0.0
+    $proposedAreaTotal = 0.0
+    foreach ($item in $managed) { $originalAreaTotal += ([double]$item.Width * [double]$item.Height) }
+    foreach ($item in @($proposed | Where-Object { -not $_.IsLocked })) { $proposedAreaTotal += ([double]$item.Width * [double]$item.Height) }
+    $maxShareDelta = 0.0
+    if ($originalAreaTotal -gt 0 -and $proposedAreaTotal -gt 0) {
+        foreach ($item in @($proposed | Where-Object { -not $_.IsLocked })) {
+            $sourceItem = @($managed | Where-Object { $_.Id -eq $item.Id })[0]
+            $oldShare = (([double]$sourceItem.Width * [double]$sourceItem.Height) / $originalAreaTotal)
+            $newShare = (([double]$item.Width * [double]$item.Height) / $proposedAreaTotal)
+            $maxShareDelta = [Math]::Max($maxShareDelta,[Math]::Abs($newShare - $oldShare) * 100.0)
+        }
+    }
+
+    [pscustomobject]@{
+        PageWidth = [double]$Analysis.PageWidth
+        PageHeight = [double]$Analysis.PageHeight
+        Margin = $Margin
+        Gap = $Gap
+        ContentLeft = [Math]::Round($ContentLeft,3)
+        ContentTop = [Math]::Round($ContentTop,3)
+        ContentRight = [Math]::Round($ContentRight,3)
+        ContentBottom = [Math]::Round($ContentBottom,3)
+        Columns = [int]$Analysis.ColumnCount
+        Rows = [int]$Analysis.RowCount
+        LayoutStrategy = 'Region Preserve'
+        RegionScaleX = [Math]::Round($scaleX,5)
+        RegionScaleY = [Math]::Round($scaleY,5)
+        MaxAreaShareDeltaPercent = [Math]::Round($maxShareDelta,4)
+        Items = $proposed
+        ChangedCount = @($proposed | Where-Object { $_.Changed }).Count
+    }
+}
 function Get-ScaledTrackSizes {
     param(
         [int]$TrackCount,
@@ -580,6 +657,9 @@ function Get-SmartPbiLayout {
 
     $areaLayout = Get-AreaPreservingPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
     if ($null -ne $areaLayout) { return $areaLayout }
+
+    $regionLayout = Get-RegionPreservingPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
+    if ($null -ne $regionLayout) { return $regionLayout }
 
     return Get-WeightedTrackPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
 }
