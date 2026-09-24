@@ -278,33 +278,57 @@ try {
     Assert-True ($visibleGroupAnalysis.ActiveGroupedVisualCount -eq 1) 'Visible grouped child count is reported'
     Assert-True ($visibleGroupAnalysis.GroupContainerCount -eq 1) 'Visible group container is ignored as structure'
 
-    # Complex macro layout: a dominant right visual spans multiple rows while
-    # the left side contains its own stack. This must preserve the original
-    # left/right region ratio instead of collapsing everything into global tracks.
-    $regionItems = @(
-        [pscustomobject]@{ Id='RTopLeft'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=10.0; Width=330.0; Height=45.0; Column=0; Row=0; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RTop1'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=350.0; Y=10.0; Width=150.0; Height=45.0; Column=2; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RTop2'; VisualType='card'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=510.0; Y=10.0; Width=150.0; Height=45.0; Column=3; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RTop3'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=670.0; Y=10.0; Width=150.0; Height=45.0; Column=4; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RTop4'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=830.0; Y=10.0; Width=160.0; Height=45.0; Column=5; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RLeftMid'; VisualType='chart'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=70.0; Width=330.0; Height=180.0; Column=0; Row=1; ColumnSpan=2; RowSpan=2; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RLeftBottom'; VisualType='chart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=260.0; Width=330.0; Height=330.0; Column=0; Row=3; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
-        [pscustomobject]@{ Id='RRightDominant'; VisualType='tableEx'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=350.0; Y=70.0; Width=640.0; Height=520.0; Column=2; Row=1; ColumnSpan=4; RowSpan=3; IsLocked=$false; AllowOverlap=$false }
+    # Requested alignment pattern:
+    # top row widths are the primary horizontal proportions;
+    # left stack heights are the primary vertical proportions;
+    # remaining visuals snap into those tracks after overlap normalization.
+    $frameItems = @(
+        [pscustomobject]@{ Id='FTop1'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=10.0; Width=200.0; Height=50.0; Column=0; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FTop2'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=220.0; Y=10.0; Width=50.0; Height=50.0; Column=1; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FTop3'; VisualType='card'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=280.0; Y=10.0; Width=50.0; Height=50.0; Column=2; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FTop4'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=340.0; Y=10.0; Width=51.0; Height=50.0; Column=3; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FTop5'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=401.0; Y=10.0; Width=95.0; Height=50.0; Column=4; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FTop6'; VisualType='card'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=506.0; Y=10.0; Width=144.0; Height=50.0; Column=5; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+
+        [pscustomobject]@{ Id='FLeft1'; VisualType='chart'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=70.0; Width=200.0; Height=70.0; Column=0; Row=1; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FLeft2'; VisualType='chart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=150.0; Width=200.0; Height=50.0; Column=0; Row=2; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FLeft3'; VisualType='chart'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=210.0; Width=200.0; Height=90.0; Column=0; Row=3; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FLeft4'; VisualType='chart'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=310.0; Width=200.0; Height=120.0; Column=0; Row=4; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FLeft5'; VisualType='chart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=440.0; Width=200.0; Height=160.0; Column=0; Row=5; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+
+        [pscustomobject]@{ Id='FInner1'; VisualType='tableEx'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=220.0; Y=70.0; Width=171.0; Height=130.0; Column=1; Row=1; ColumnSpan=3; RowSpan=2; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FInner2'; VisualType='tableEx'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=401.0; Y=70.0; Width=249.0; Height=360.0; Column=4; Row=1; ColumnSpan=2; RowSpan=4; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='FInner3'; VisualType='barChart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=220.0; Y=310.0; Width=171.0; Height=290.0; Column=1; Row=4; ColumnSpan=3; RowSpan=2; IsLocked=$false; AllowOverlap=$false }
     )
-    $regionAnalysis = [pscustomobject]@{
-        PageWidth=1000.0; PageHeight=600.0; ColumnCount=6; RowCount=4;
-        ReservedLeft=0.0; ReservedTop=0.0; ReservedRight=1000.0; ReservedBottom=600.0;
-        Items=$regionItems
+    $frameAnalysis = [pscustomobject]@{
+        PageWidth=660.0; PageHeight=610.0; ColumnCount=6; RowCount=6;
+        ReservedLeft=0.0; ReservedTop=0.0; ReservedRight=660.0; ReservedBottom=610.0;
+        Items=$frameItems
     }
-    $regionLayout = Get-SmartPbiLayout -Analysis $regionAnalysis -Margin 5 -Gap 5
-    Assert-True ($regionLayout.LayoutStrategy -eq 'Region Preserve') 'Complex macro layout uses Region Preserve instead of Weighted Tracks'
-    $regionLeft = @($regionLayout.Items | Where-Object { $_.Id -eq 'RLeftBottom' })[0]
-    $regionRight = @($regionLayout.Items | Where-Object { $_.Id -eq 'RRightDominant' })[0]
-    $sourceLeftShare = 330.0 / 980.0
-    $newLeftShare = [double]$regionLeft.Width / ([double]$regionLeft.Width + 10.102 + [double]$regionRight.Width)
-    Assert-True ([Math]::Abs($newLeftShare - $sourceLeftShare) -le 0.02) 'Region Preserve keeps the original left/right width proportion'
-    Assert-True ($regionLayout.MaxAreaShareDeltaPercent -le 0.01) 'Region Preserve keeps relative occupied-area shares'
-    Assert-True (Test-PbiLayout -Layout $regionLayout).IsValid 'Region Preserve does not introduce new overlaps'
+    $frameLayout = Get-SmartPbiLayout -Analysis $frameAnalysis -Margin 5 -Gap 5
+    Assert-True ($frameLayout.LayoutStrategy -eq 'Frame Anchors') 'Frame Anchors is the primary top-left alignment strategy'
+    Assert-True ($frameLayout.TopAnchorCount -eq 6) 'Frame Anchors detects six top width anchors'
+    Assert-True ($frameLayout.LeftAnchorCount -eq 5) 'Frame Anchors detects five left height anchors'
+
+    $frameTop = @($frameLayout.Items | Where-Object { $_.Id -like 'FTop*' } | Sort-Object X)
+    $sourceRatio = 200.0 / 50.0
+    $newRatio = [double]$frameTop[0].Width / [double]$frameTop[1].Width
+    Assert-True ([Math]::Abs($newRatio - $sourceRatio) -le 0.001) 'Frame Anchors preserves top-row width proportions'
+    for ($i = 1; $i -lt $frameTop.Count; $i++) {
+        $actualGap = [double]$frameTop[$i].X - ([double]$frameTop[$i-1].X + [double]$frameTop[$i-1].Width)
+        Assert-True ([Math]::Abs($actualGap - 5) -le 0.01) ('Frame Anchors top gap '+$i+' is exact')
+    }
+
+    $frameLeft = @($frameLayout.Items | Where-Object { $_.Id -like 'FLeft*' } | Sort-Object Y)
+    $leftSourceRatio = 160.0 / 50.0
+    $leftNewRatio = [double]$frameLeft[4].Height / [double]$frameLeft[1].Height
+    Assert-True ([Math]::Abs($leftNewRatio - $leftSourceRatio) -le 0.001) 'Frame Anchors preserves left-stack height proportions'
+    Assert-True ([double]$frameLeft[4].Height -le (160.0 * 1.40 + 0.01)) 'Frame Anchors caps left-row height growth'
+
+    $frameInner = @($frameLayout.Items | Where-Object { $_.Id -eq 'FInner2' })[0]
+    Assert-True ([Math]::Abs([double]$frameInner.X - [double]$frameTop[4].X) -le 0.01) 'Inner visual snaps to top-defined horizontal track'
+    Assert-True ([Math]::Abs([double]$frameInner.Y - [double]$frameLeft[0].Y) -le 0.01) 'Inner visual snaps to left-defined vertical track'
+    Assert-True (Test-PbiLayout -Layout $frameLayout).IsValid 'Frame Anchors produces a non-overlapping proposal'
 
     # Synthetic anchor-priority case: top is the primary width anchor and
     # left is the primary height anchor when original dimensions differ only slightly.
