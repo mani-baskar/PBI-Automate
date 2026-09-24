@@ -135,12 +135,13 @@ try {
     Write-Utf8NoBom -Path (Join-Path $pageFolder 'page.json') -Content '{"name":"Page1","displayName":"Executive Summary","displayOption":"FitToPage","width":400,"height":300}'
     Write-Utf8NoBom -Path (Join-Path $page2Folder 'page.json') -Content '{"name":"Page2","displayName":"Other Page","displayOption":"FitToPage","width":400,"height":300}'
 
+    $background = New-TestVisual -PageFolder $pageFolder -Id 'Background.Visual' -X 0 -Y 0 -Width 400 -Height 300 -Type 'shape'
     $a = New-TestVisual -PageFolder $pageFolder -Id 'VisualA.Visual' -X 7.25 -Y 8.5 -Width 184.75 -Height 130.25 -Type 'card'
     $b = New-TestVisual -PageFolder $pageFolder -Id 'VisualB.Visual' -X 204.4 -Y 11.2 -Width 188.1 -Height 127.6 -Type 'card'
     $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC.Visual' -X 9.1 -Y 151.35 -Width 383.2 -Height 140.4 -Type 'barChart'
 
     $originalHash = @{}
-    foreach ($path in @($a,$b,$c)) {
+    foreach ($path in @($background,$a,$b,$c)) {
         $originalHash[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     }
 
@@ -176,10 +177,12 @@ try {
     Assert-True ((Get-Item -LiteralPath $directReport.ReportFolder).FullName -ieq $resolvedExpected) 'Direct .Report folder selection resolves correctly'
 
     $snapshot = Get-PbiPageSnapshot -Page $pages[0]
-    Assert-True ($snapshot.Visuals.Count -eq 3) 'Three supported visuals are read'
+    Assert-True ($snapshot.Visuals.Count -eq 4) 'Four supported visuals, including a canvas background, are read'
     Assert-True ($snapshot.Width -eq 400 -and $snapshot.Height -eq 300) 'Page canvas size is read'
 
     $analysis = Get-PbiLayoutAnalysis -PageSnapshot $snapshot
+    Assert-True ($analysis.LockedVisualCount -eq 1) 'Canvas-sized background is protected from Smart Align'
+    Assert-True ($analysis.ManagedVisualCount -eq 3) 'Only content visuals participate in row/column detection'
     Assert-True ($analysis.ColumnCount -eq 2) 'Rough X positions collapse into two columns'
     Assert-True ($analysis.RowCount -eq 2) 'Rough Y positions collapse into two rows'
 
@@ -187,11 +190,18 @@ try {
     Assert-True ($wide.ColumnSpan -eq 2) 'Wide visual is detected as a two-column span'
 
     $layout = Get-SmartPbiLayout -Analysis $analysis -Margin 5 -Gap 5
-    Assert-True ($layout.ChangedCount -eq 3) 'All rough fixture visuals receive deterministic geometry corrections'
+    Assert-True ($layout.ChangedCount -eq 3) 'Only the three rough content visuals receive geometry corrections'
+    $lockedBackground = @($layout.Items | Where-Object { $_.Id -eq 'Background.Visual' })[0]
+    Assert-True ($lockedBackground.IsLocked -and -not $lockedBackground.Changed) 'Protected background remains unchanged in the proposal'
+    Assert-True ($lockedBackground.X -eq 0 -and $lockedBackground.Y -eq 0 -and $lockedBackground.Width -eq 400 -and $lockedBackground.Height -eq 300) 'Protected background geometry is preserved exactly'
     Assert-True ($layout.Columns -eq 2 -and $layout.Rows -eq 2) 'Layout keeps the detected two-by-two structure'
 
+    $currentWithBackground = [pscustomobject]@{ PageWidth=$snapshot.Width; PageHeight=$snapshot.Height; Items=$snapshot.Visuals }
+    $currentValidation = Test-PbiLayout -Layout $currentWithBackground
+    Assert-True $currentValidation.IsValid 'Current-page validation permits intentional canvas-background overlap'
+
     $validation = Test-PbiLayout -Layout $layout
-    Assert-True $validation.IsValid 'Proposed layout is in-bounds and has no overlaps'
+    Assert-True $validation.IsValid 'Proposed layout is in-bounds and has no unintended overlaps'
 
     $staleOriginal = [System.IO.File]::ReadAllText($a)
     [System.IO.File]::WriteAllText($a,($staleOriginal + [Environment]::NewLine),(New-Object System.Text.UTF8Encoding($false)))
@@ -211,7 +221,8 @@ try {
 
     $backup = New-PbiBackup -ProjectRoot $project.ProjectRoot -Items $layout.Items -PageName $pages[0].DisplayName
     Assert-True (Test-Path -LiteralPath $backup.ManifestPath -PathType Leaf) 'Backup manifest is created before write'
-    Assert-True (@($backup.Manifest.Entries).Count -eq 3) 'All changed visual files are backed up'
+    Assert-True (@($backup.Manifest.Entries).Count -eq 3) 'Only changed content visual files are backed up'
+    Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $background }).Count -gt 0)) 'Protected background is not included in write backup'
 
     $write = Set-PbiLayoutFiles -Layout $layout -BackupOperation $backup
     Assert-True ($write.Success -and $write.ChangedCount -eq 3) 'Geometry writes complete successfully'
@@ -244,7 +255,7 @@ try {
     Assert-True ([string]$undoneManifest.Status -eq 'Undone') 'Undo marks the latest operation as Undone'
     Assert-Throws { Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot | Out-Null } 'A completed Undo cannot be repeated accidentally'
 
-    foreach ($path in @($a,$b,$c)) {
+    foreach ($path in @($background,$a,$b,$c)) {
         $restored = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
         Assert-True ($restored -eq $originalHash[$path]) ((Split-Path -Leaf (Split-Path -Parent $path)) + ' is byte-for-byte restored')
     }
