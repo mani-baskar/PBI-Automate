@@ -14,6 +14,94 @@ function Get-AnalysisNumber {
     return $Default
 }
 
+function Get-AnalysisArray {
+    param(
+        [Parameter(Mandatory=$true)]$Analysis,
+        [Parameter(Mandatory=$true)][string]$Name
+    )
+
+    if ($Analysis.PSObject.Properties.Name -contains $Name) {
+        return @($Analysis.$Name)
+    }
+
+    return @()
+}
+
+function Get-ScaledTrackSizes {
+    param(
+        [Parameter(Mandatory=$true)][int]$TrackCount,
+        [Parameter(Mandatory=$true)][double]$AvailableSize,
+        [Parameter(Mandatory=$true)][double]$Gap,
+        [object[]]$Weights
+    )
+
+    if ($TrackCount -le 0) { return @() }
+
+    $usable = $AvailableSize - (($TrackCount - 1) * $Gap)
+    if ($usable -le 0) {
+        throw 'Configured gap leaves no usable space for detected tracks.'
+    }
+
+    $rawWeights = @()
+    for ($i = 0; $i -lt $TrackCount; $i++) {
+        $value = 1.0
+        if ($null -ne $Weights -and $i -lt $Weights.Count) {
+            $candidate = [double]$Weights[$i]
+            if ($candidate -gt 0) { $value = $candidate }
+        }
+        $rawWeights += $value
+    }
+
+    $totalWeight = [double](($rawWeights | Measure-Object -Sum).Sum)
+    if ($totalWeight -le 0) {
+        $rawWeights = @(1..$TrackCount | ForEach-Object { 1.0 })
+        $totalWeight = [double]$TrackCount
+    }
+
+    $scaled = @()
+    foreach ($weight in $rawWeights) {
+        $scaled += [double]($usable * ([double]$weight / $totalWeight))
+    }
+
+    return @($scaled)
+}
+
+function Get-TrackOffset {
+    param(
+        [Parameter(Mandatory=$true)][double]$Origin,
+        [Parameter(Mandatory=$true)][double[]]$TrackSizes,
+        [Parameter(Mandatory=$true)][int]$Index,
+        [Parameter(Mandatory=$true)][double]$Gap
+    )
+
+    $offset = $Origin
+    for ($i = 0; $i -lt $Index; $i++) {
+        $offset += [double]$TrackSizes[$i] + $Gap
+    }
+
+    return $offset
+}
+
+function Get-SpannedTrackSize {
+    param(
+        [Parameter(Mandatory=$true)][double[]]$TrackSizes,
+        [Parameter(Mandatory=$true)][int]$StartIndex,
+        [Parameter(Mandatory=$true)][int]$Span,
+        [Parameter(Mandatory=$true)][double]$Gap
+    )
+
+    $size = 0.0
+    for ($i = $StartIndex; $i -lt ($StartIndex + $Span); $i++) {
+        $size += [double]$TrackSizes[$i]
+    }
+
+    if ($Span -gt 1) {
+        $size += ($Span - 1) * $Gap
+    }
+
+    return $size
+}
+
 function Get-SmartPbiLayout {
     [CmdletBinding()]
     param(
@@ -46,21 +134,19 @@ function Get-SmartPbiLayout {
         throw 'Protected header/footer/sidebar regions leave no usable content area for Smart Align.'
     }
 
-    $usableWidth = $contentWidth - (($columns - 1) * $Gap)
-    $usableHeight = $contentHeight - (($rows - 1) * $Gap)
+    $columnWeights = Get-AnalysisArray -Analysis $Analysis -Name 'ColumnWeights'
+    $rowWeights = Get-AnalysisArray -Analysis $Analysis -Name 'RowWeights'
 
-    if ($usableWidth -le 0 -or $usableHeight -le 0) {
-        throw 'Configured margin/gap or protected regions leave insufficient space for the detected layout.'
-    }
+    $columnSizes = [double[]]@(Get-ScaledTrackSizes -TrackCount $columns -AvailableSize $contentWidth -Gap $Gap -Weights $columnWeights)
+    $rowSizes = [double[]]@(Get-ScaledTrackSizes -TrackCount $rows -AvailableSize $contentHeight -Gap $Gap -Weights $rowWeights)
 
-    $cellWidth = $usableWidth / $columns
-    $cellHeight = $usableHeight / $rows
     $proposed = @()
 
     foreach ($item in @($Analysis.Items)) {
         $isLocked = ($item.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$item.IsLocked)
         $allowOverlap = ($item.PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$item.AllowOverlap)
         $protectionReason = $null
+
         if ($item.PSObject.Properties.Name -contains 'ProtectionReason') {
             $protectionReason = $item.ProtectionReason
         }
@@ -96,13 +182,14 @@ function Get-SmartPbiLayout {
 
         $col = [Math]::Min([Math]::Max(0,[int]$item.Column),$columns - 1)
         $row = [Math]::Min([Math]::Max(0,[int]$item.Row),$rows - 1)
+
         $colSpan = [Math]::Min([Math]::Max(1,[int]$item.ColumnSpan),$columns - $col)
         $rowSpan = [Math]::Min([Math]::Max(1,[int]$item.RowSpan),$rows - $row)
 
-        $x = $contentLeft + ($col * ($cellWidth + $Gap))
-        $y = $contentTop + ($row * ($cellHeight + $Gap))
-        $width = ($cellWidth * $colSpan) + ($Gap * ($colSpan - 1))
-        $height = ($cellHeight * $rowSpan) + ($Gap * ($rowSpan - 1))
+        $x = Get-TrackOffset -Origin $contentLeft -TrackSizes $columnSizes -Index $col -Gap $Gap
+        $y = Get-TrackOffset -Origin $contentTop -TrackSizes $rowSizes -Index $row -Gap $Gap
+        $width = Get-SpannedTrackSize -TrackSizes $columnSizes -StartIndex $col -Span $colSpan -Gap $Gap
+        $height = Get-SpannedTrackSize -TrackSizes $rowSizes -StartIndex $row -Span $rowSpan -Gap $Gap
 
         $proposed += [pscustomobject]@{
             Id = $item.Id
@@ -128,13 +215,16 @@ function Get-SmartPbiLayout {
             IsLocked = $false
             AllowOverlap = $false
             Changed = (
-                [Math]::Abs($item.X - $x) -gt 0.001 -or
-                [Math]::Abs($item.Y - $y) -gt 0.001 -or
-                [Math]::Abs($item.Width - $width) -gt 0.001 -or
-                [Math]::Abs($item.Height - $height) -gt 0.001
+                [Math]::Abs([double]$item.X - $x) -gt 0.001 -or
+                [Math]::Abs([double]$item.Y - $y) -gt 0.001 -or
+                [Math]::Abs([double]$item.Width - $width) -gt 0.001 -or
+                [Math]::Abs([double]$item.Height - $height) -gt 0.001
             )
         }
     }
+
+    $cellWidth = [double](($columnSizes | Measure-Object -Average).Average)
+    $cellHeight = [double](($rowSizes | Measure-Object -Average).Average)
 
     [pscustomobject]@{
         PageWidth = [double]$Analysis.PageWidth
@@ -147,6 +237,8 @@ function Get-SmartPbiLayout {
         ContentBottom = [Math]::Round($contentBottom,3)
         Columns = $columns
         Rows = $rows
+        ColumnSizes = @($columnSizes | ForEach-Object { [Math]::Round($_,3) })
+        RowSizes = @($rowSizes | ForEach-Object { [Math]::Round($_,3) })
         CellWidth = [Math]::Round($cellWidth,3)
         CellHeight = [Math]::Round($cellHeight,3)
         Items = $proposed
