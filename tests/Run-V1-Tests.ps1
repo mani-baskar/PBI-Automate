@@ -278,6 +278,34 @@ try {
     Assert-True ($visibleGroupAnalysis.ActiveGroupedVisualCount -eq 1) 'Visible grouped child count is reported'
     Assert-True ($visibleGroupAnalysis.GroupContainerCount -eq 1) 'Visible group container is ignored as structure'
 
+    # Complex macro layout: a dominant right visual spans multiple rows while
+    # the left side contains its own stack. This must preserve the original
+    # left/right region ratio instead of collapsing everything into global tracks.
+    $regionItems = @(
+        [pscustomobject]@{ Id='RTopLeft'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=10.0; Width=330.0; Height=45.0; Column=0; Row=0; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RTop1'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=350.0; Y=10.0; Width=150.0; Height=45.0; Column=2; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RTop2'; VisualType='card'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=510.0; Y=10.0; Width=150.0; Height=45.0; Column=3; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RTop3'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=670.0; Y=10.0; Width=150.0; Height=45.0; Column=4; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RTop4'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=830.0; Y=10.0; Width=160.0; Height=45.0; Column=5; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RLeftMid'; VisualType='chart'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=70.0; Width=330.0; Height=180.0; Column=0; Row=1; ColumnSpan=2; RowSpan=2; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RLeftBottom'; VisualType='chart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=10.0; Y=260.0; Width=330.0; Height=330.0; Column=0; Row=3; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='RRightDominant'; VisualType='tableEx'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; EffectiveHidden=$false; ProtectionReason=$null; X=350.0; Y=70.0; Width=640.0; Height=520.0; Column=2; Row=1; ColumnSpan=4; RowSpan=3; IsLocked=$false; AllowOverlap=$false }
+    )
+    $regionAnalysis = [pscustomobject]@{
+        PageWidth=1000.0; PageHeight=600.0; ColumnCount=6; RowCount=4;
+        ReservedLeft=0.0; ReservedTop=0.0; ReservedRight=1000.0; ReservedBottom=600.0;
+        Items=$regionItems
+    }
+    $regionLayout = Get-SmartPbiLayout -Analysis $regionAnalysis -Margin 5 -Gap 5
+    Assert-True ($regionLayout.LayoutStrategy -eq 'Region Preserve') 'Complex macro layout uses Region Preserve instead of Weighted Tracks'
+    $regionLeft = @($regionLayout.Items | Where-Object { $_.Id -eq 'RLeftBottom' })[0]
+    $regionRight = @($regionLayout.Items | Where-Object { $_.Id -eq 'RRightDominant' })[0]
+    $sourceLeftShare = 330.0 / 980.0
+    $newLeftShare = [double]$regionLeft.Width / ([double]$regionLeft.Width + 10.102 + [double]$regionRight.Width)
+    Assert-True ([Math]::Abs($newLeftShare - $sourceLeftShare) -le 0.02) 'Region Preserve keeps the original left/right width proportion'
+    Assert-True ($regionLayout.MaxAreaShareDeltaPercent -le 0.01) 'Region Preserve keeps relative occupied-area shares'
+    Assert-True (Test-PbiLayout -Layout $regionLayout).IsValid 'Region Preserve does not introduce new overlaps'
+
     # Synthetic anchor-priority case: top is the primary width anchor and
     # left is the primary height anchor when original dimensions differ only slightly.
     $anchorItems = @(
