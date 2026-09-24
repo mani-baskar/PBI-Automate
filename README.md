@@ -1,5 +1,7 @@
 # PBI Automate
 
+![V1 Windows PowerShell Tests](https://github.com/mani-baskar/PBI-Automate/actions/workflows/v1-windows-tests.yml/badge.svg?branch=dev/v1-smart-layout)
+
 Open-source Windows automation toolkit for Power BI PBIP projects.
 
 > **Development status:** V1 is under active development on `dev/v1-smart-layout`. The `main` branch is intentionally kept clean until V1 has passed Windows + Power BI Desktop manual verification.
