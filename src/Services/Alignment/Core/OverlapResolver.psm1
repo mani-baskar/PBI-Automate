@@ -180,6 +180,74 @@ function Find-NearestFreeAlignmentPlacement {
     }
 }
 
+function Get-CompactShelfAlignmentPlacements {
+    param(
+        [Parameter(Mandatory=$true)][object[]]$Items,
+        [Parameter(Mandatory=$true)][double]$Left,
+        [Parameter(Mandatory=$true)][double]$Top,
+        [Parameter(Mandatory=$true)][double]$Right,
+        [Parameter(Mandatory=$true)][double]$Bottom,
+        [Parameter(Mandatory=$true)][double]$Gap
+    )
+
+    $ordered = @($Items | Sort-Object Y, X, @{Expression={ [double]$_.Width * [double]$_.Height };Descending=$true})
+    $scales = @(1.00,0.95,0.90,0.85,0.80,0.75,0.70,0.65,0.60,0.55,0.50,0.45,0.40,0.35,0.30,0.25)
+
+    foreach ($scale in $scales) {
+        $cursorX = $Left
+        $cursorY = $Top
+        $rowHeight = 0.0
+        $placements = @{}
+        $failed = $false
+
+        foreach ($item in $ordered) {
+            $width = [double]$item.Width * $scale
+            $height = [double]$item.Height * $scale
+
+            if ($width -gt ($Right - $Left) -or $height -gt ($Bottom - $Top) -or $width -le 1 -or $height -le 1) {
+                $failed = $true
+                break
+            }
+
+            if (($cursorX + $width) -gt ($Right + 0.001) -and $cursorX -gt ($Left + 0.001)) {
+                $cursorX = $Left
+                $cursorY += $rowHeight + $Gap
+                $rowHeight = 0.0
+            }
+
+            if (($cursorY + $height) -gt ($Bottom + 0.001)) {
+                $failed = $true
+                break
+            }
+
+            $placements[[string]$item.Id] = [pscustomobject]@{
+                Id = $item.Id
+                X = [double]$cursorX
+                Y = [double]$cursorY
+                Width = $width
+                Height = $height
+            }
+
+            $cursorX += $width + $Gap
+            $rowHeight = [Math]::Max($rowHeight,$height)
+        }
+
+        if (-not $failed -and $placements.Count -eq $ordered.Count) {
+            return [pscustomobject]@{
+                Found = $true
+                Scale = [double]$scale
+                Placements = $placements
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Found = $false
+        Scale = 1.0
+        Placements = @{}
+    }
+}
+
 function Copy-AlignmentSnapshotVisual {
     param(
         [Parameter(Mandatory=$true)]$Visual,
@@ -237,6 +305,7 @@ function Resolve-PbiSnapshotOverlaps {
             MovedCount = 0
             ResizedCount = 0
             Resolved = $true
+            UsedCompactFallback = $false
             Actions = @()
         }
     }
@@ -270,7 +339,7 @@ function Resolve-PbiSnapshotOverlaps {
             Height = [double]$item.Height
         }
 
-        if (Test-AlignmentPlacementFree -Candidate $originalCandidate -Placed $placed -Left $contentLeft -Top $contentTop -Right $contentRight -Bottom $contentBottom -Gap $Gap) {
+        if (Test-AlignmentPlacementFree -Candidate $originalCandidate -Placed $placed -Left $contentLeft -Top $contentTop -Right $contentRight -Bottom $contentBottom -Gap 0) {
             $placement = [pscustomobject]@{
                 Found = $true
                 X = [double]$item.X
@@ -335,6 +404,68 @@ function Resolve-PbiSnapshotOverlaps {
         }
     }
 
+    $usedCompactFallback = $false
+
+    $provisionalManaged = @()
+    foreach ($item in $managed) {
+        $g = $normalized[[string]$item.Id]
+        $provisionalManaged += [pscustomobject]@{
+            Id = $item.Id
+            X = [double]$g.X
+            Y = [double]$g.Y
+            Width = [double]$g.Width
+            Height = [double]$g.Height
+        }
+    }
+
+    $provisionalRemaining = @(Get-AlignmentOverlapPairs -Items $provisionalManaged -Gap 0)
+
+    if ($provisionalRemaining.Count -gt 0) {
+        # No nearest same-size/shrunk slot was sufficient. Compact all active
+        # content visuals into the available content rectangle as a last resort,
+        # preserving their relative reading order and aspect ratios.
+        $compact = Get-CompactShelfAlignmentPlacements -Items $managed -Left $contentLeft -Top $contentTop -Right $contentRight -Bottom $contentBottom -Gap $Gap
+
+        if ($compact.Found) {
+            $usedCompactFallback = $true
+            $normalized = $compact.Placements
+            $actions = @()
+            $movedCount = 0
+            $resizedCount = 0
+
+            foreach ($item in $managed) {
+                $g = $normalized[[string]$item.Id]
+                $moved = ([Math]::Abs([double]$item.X - [double]$g.X) -gt 0.001 -or
+                          [Math]::Abs([double]$item.Y - [double]$g.Y) -gt 0.001)
+                $resized = ([Math]::Abs([double]$item.Width - [double]$g.Width) -gt 0.001 -or
+                            [Math]::Abs([double]$item.Height - [double]$g.Height) -gt 0.001)
+
+                if ($moved) { $movedCount++ }
+                if ($resized) { $resizedCount++ }
+
+                if ($moved -or $resized) {
+                    $actions += [pscustomobject]@{
+                        Id = $item.Id
+                        Resolved = $true
+                        OldX = [double]$item.X
+                        OldY = [double]$item.Y
+                        OldWidth = [double]$item.Width
+                        OldHeight = [double]$item.Height
+                        X = [double]$g.X
+                        Y = [double]$g.Y
+                        Width = [double]$g.Width
+                        Height = [double]$g.Height
+                        Scale = [double]$compact.Scale
+                        Distance = [Math]::Sqrt(
+                            ([double]$g.X - [double]$item.X) * ([double]$g.X - [double]$item.X) +
+                            ([double]$g.Y - [double]$item.Y) * ([double]$g.Y - [double]$item.Y)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     $newVisuals = @()
 
     foreach ($visual in @($PageSnapshot.Visuals)) {
@@ -379,6 +510,7 @@ function Resolve-PbiSnapshotOverlaps {
         MovedCount = $movedCount
         ResizedCount = $resizedCount
         Resolved = ($remaining.Count -eq 0)
+        UsedCompactFallback = $usedCompactFallback
         Actions = $actions
     }
 }
