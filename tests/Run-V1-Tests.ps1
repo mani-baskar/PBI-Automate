@@ -62,6 +62,13 @@ function Assert-True {
     Write-Host ('PASS  ' + $Message) -ForegroundColor Green
 }
 
+function Assert-Throws {
+    param([scriptblock]$Action,[string]$Message)
+    $thrown = $false
+    try { & $Action } catch { $thrown = $true }
+    Assert-True $thrown $Message
+}
+
 function Write-Utf8NoBom {
     param([string]$Path,[string]$Content)
     $parent = Split-Path -Parent $Path
@@ -126,6 +133,10 @@ try {
     $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC' -X 9 -Y 151 -Width 383 -Height 140 -Type 'barChart'
 
     $originalHash = @{}
+    $undoneManifest = Get-Content -LiteralPath $backup.ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ([string]$undoneManifest.Status -eq 'Undone') 'Undo marks the latest operation as Undone'
+    Assert-Throws { Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot | Out-Null } 'A completed Undo cannot be repeated accidentally'
+
     foreach ($path in @($a,$b,$c)) {
         $originalHash[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     }
@@ -184,6 +195,10 @@ try {
     $write = Set-PbiLayoutFiles -Layout $layout -BackupOperation $backup
     Assert-True ($write.Success -and $write.ChangedCount -eq 3) 'Geometry writes complete successfully'
 
+    $appliedManifest = Get-Content -LiteralPath $backup.ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ([string]$appliedManifest.Status -eq 'Applied') 'Backup manifest records Applied status'
+    Assert-True (@($appliedManifest.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.AppliedHash) }).Count -eq 3) 'Backup manifest records post-apply hashes'
+
     $postSnapshot = Get-PbiPageSnapshot -Page $pages[0]
     $postAJson = Get-Content -LiteralPath $a -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-True ($postAJson.visual.visualType -eq 'card') 'Non-geometry visual type/formatting payload remains after write'
@@ -195,6 +210,11 @@ try {
         Assert-True ([Math]::Abs($actual.Width - $expected.Width) -le 0.001) ($expected.Id + ' width is verified after write')
         Assert-True ([Math]::Abs($actual.Height - $expected.Height) -le 0.001) ($expected.Id + ' height is verified after write')
     }
+
+    $appliedA = [System.IO.File]::ReadAllText($a)
+    [System.IO.File]::WriteAllText($a,($appliedA + [Environment]::NewLine),(New-Object System.Text.UTF8Encoding($false)))
+    Assert-Throws { Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot | Out-Null } 'Undo blocks newer edits made after Apply'
+    [System.IO.File]::WriteAllText($a,$appliedA,(New-Object System.Text.UTF8Encoding($false)))
 
     $undo = Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot
     Assert-True ($undo.Success -and $undo.RestoredCount -eq 3) 'Undo restores the most recent operation'
