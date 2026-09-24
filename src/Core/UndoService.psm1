@@ -22,8 +22,14 @@ function Undo-LatestPbiApply {
 
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 
-    if ($manifest.PSObject.Properties.Name -contains 'Status' -and [string]$manifest.Status -eq 'Undone') {
+    $status = ''
+    if ($manifest.PSObject.Properties.Name -contains 'Status') { $status = [string]$manifest.Status }
+
+    if ($status -eq 'Undone') {
         throw 'The latest PBI Automate apply operation has already been undone.'
+    }
+    if ($status -ne 'Applied') {
+        throw ('The latest PBI Automate operation is not in Applied state (status: {0}). Nothing can be safely undone.' -f $status)
     }
 
     foreach ($entry in @($manifest.Entries)) {
