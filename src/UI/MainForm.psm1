@@ -165,7 +165,7 @@ function Show-PBIAutomateMainForm {
     $workspaceShell.RowCount = 1
     $workspaceShell.Margin = New-Object System.Windows.Forms.Padding(0)
     $workspaceShell.Padding = New-Object System.Windows.Forms.Padding(0)
-    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,280)))
+    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,245)))
     [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
     [void]$workspaceShell.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
     $rootGrid.Controls.Add($workspaceShell,0,1)
@@ -175,7 +175,7 @@ function Show-PBIAutomateMainForm {
     $navPanel.Dock = 'Fill'
     $navPanel.Margin = New-Object System.Windows.Forms.Padding(0)
     $navPanel.BackColor = [System.Drawing.Color]::FromArgb(30,41,59)
-    $navPanel.Padding = New-Object System.Windows.Forms.Padding(14,12,14,10)
+    $navPanel.Padding = New-Object System.Windows.Forms.Padding(10,12,10,10)
     $workspaceShell.Controls.Add($navPanel,0,0)
 
     $navGrid = New-Object System.Windows.Forms.TableLayoutPanel
@@ -203,14 +203,14 @@ function Show-PBIAutomateMainForm {
     $serviceList.RowCount = ($services.Count + 1)
     [void]$serviceList.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
     for ($serviceRow = 0; $serviceRow -lt $services.Count; $serviceRow++) {
-        [void]$serviceList.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute,64)))
+        [void]$serviceList.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute,60)))
     }
     [void]$serviceList.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
     $serviceList.Padding = New-Object System.Windows.Forms.Padding(0,2,0,0)
     $navGrid.Controls.Add($serviceList,0,1)
 
     $versionLabel = New-Object System.Windows.Forms.Label
-    $versionLabel.Text = ('PBIP Automation`r`n' + [string]$config.version)
+    $versionLabel.Text = ('PBIP Automation' + [Environment]::NewLine + [string]$config.version)
     $versionLabel.Dock = 'Fill'
     $versionLabel.TextAlign = 'BottomLeft'
     $versionLabel.ForeColor = [System.Drawing.Color]::FromArgb(148,163,184)
@@ -224,12 +224,12 @@ function Show-PBIAutomateMainForm {
         $button.Tag = [string]$service.Id
         $button.Dock = 'Fill'
         $button.AutoSize = $false
-        $button.Height = 56
+        $button.Height = 52
         $button.Margin = New-Object System.Windows.Forms.Padding(0,4,0,4)
         $button.FlatStyle = 'Flat'
         $button.FlatAppearance.BorderSize = 0
         $button.TextAlign = 'MiddleLeft'
-        $button.Padding = New-Object System.Windows.Forms.Padding(14,0,10,0)
+        $button.Padding = New-Object System.Windows.Forms.Padding(12,0,8,0)
         $button.ForeColor = [System.Drawing.Color]::White
         $button.BackColor = [System.Drawing.Color]::FromArgb(51,65,85)
         if ([string]$service.Status -eq 'Ready') {
