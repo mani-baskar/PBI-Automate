@@ -4,7 +4,10 @@ Add-Type -AssemblyName System.Drawing
 
 function Show-PBIAutomateMainForm {
     [CmdletBinding()]
-    param([Parameter(Mandatory=$true)][string]$RootPath)
+    param(
+        [Parameter(Mandatory=$true)][string]$RootPath,
+        [switch]$BuildOnly
+    )
 
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $config = Get-PBIAutomateConfig -RootPath $RootPath
@@ -196,6 +199,11 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
     })
 
     Add-Activity 'PBI Automate V1 ready. Select a PBIP project or .Report folder.'
+
+    if ($BuildOnly) {
+        return $form
+    }
+
     [void]$form.ShowDialog()
     $form.Dispose()
 }
