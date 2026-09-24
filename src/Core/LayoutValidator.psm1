@@ -45,7 +45,10 @@ function Test-PbiLayout {
 
     for ($i=0; $i -lt $items.Count; $i++) {
         for ($j=$i+1; $j -lt $items.Count; $j++) {
-            if (Test-RectangleOverlap -A $items[$i] -B $items[$j]) {
+            $allowA = ($items[$i].PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$items[$i].AllowOverlap)
+            $allowB = ($items[$j].PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$items[$j].AllowOverlap)
+
+            if (-not $allowA -and -not $allowB -and (Test-RectangleOverlap -A $items[$i] -B $items[$j])) {
                 $errors.Add(('Overlap detected between {0} and {1}.' -f $items[$i].Id,$items[$j].Id))
             }
         }
