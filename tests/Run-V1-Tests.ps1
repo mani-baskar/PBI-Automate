@@ -125,8 +125,12 @@ $page2Folder = Join-Path $reportFolder 'definition\pages\Other.Page'
 try {
     New-Item -ItemType Directory -Path $pageFolder -Force | Out-Null
     New-Item -ItemType Directory -Path $page2Folder -Force | Out-Null
-    Write-Utf8NoBom -Path (Join-Path $projectRoot 'Demo.pbip') -Content '{}'
+    Write-Utf8NoBom -Path (Join-Path $projectRoot 'Demo.pbip') -Content '{"version":"1.0","artifacts":[{"report":{"path":"Demo.Report"}}]}'
     Write-Utf8NoBom -Path (Join-Path $reportFolder 'definition.pbir') -Content '{}'
+    $decoyReport = Join-Path $projectRoot 'Decoy.Report'
+    New-Item -ItemType Directory -Path (Join-Path $decoyReport 'definition\pages') -Force | Out-Null
+    Write-Utf8NoBom -Path (Join-Path $decoyReport 'definition.pbir') -Content '{}'
+    Write-Utf8NoBom -Path (Join-Path $decoyReport 'definition\pages\pages.json') -Content '{"pageOrder":[],"activePageName":""}'
     Write-Utf8NoBom -Path (Join-Path $reportFolder 'definition\pages\pages.json') -Content '{"pageOrder":["Page1","Page2"],"activePageName":"Page1"}'
     Write-Utf8NoBom -Path (Join-Path $pageFolder 'page.json') -Content '{"name":"Page1","displayName":"Executive Summary","displayOption":"FitToPage","width":400,"height":300}'
     Write-Utf8NoBom -Path (Join-Path $page2Folder 'page.json') -Content '{"name":"Page2","displayName":"Other Page","displayOption":"FitToPage","width":400,"height":300}'
@@ -156,6 +160,9 @@ try {
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
     $resolvedExpected = (Get-Item -LiteralPath $reportFolder).FullName
     Assert-True ($resolvedActual -ieq $resolvedExpected) 'PBIP project resolves its enhanced .Report folder'
+    Assert-True ($project.ReportName -eq 'Demo') 'PBIP artifact path selects the intended report when another .Report folder exists'
+    $rootResolved = Resolve-PbiProject -Path $projectRoot
+    Assert-True ((Get-Item -LiteralPath $rootResolved.ReportFolder).FullName -ieq $resolvedExpected) 'Project-root selection uses the single PBIP artifact path'
 
     $pages = @(Get-PbiPages -ReportFolder $project.ReportFolder)
     Assert-True ($pages.Count -eq 2) 'Two pages are discovered'
