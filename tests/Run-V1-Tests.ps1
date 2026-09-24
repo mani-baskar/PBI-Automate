@@ -39,7 +39,7 @@ function Write-Utf8NoBom {
     if (-not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    [IO.File]::WriteAllText($Path,$Content,(New-Object Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($Path,$Content,(New-Object System.Text.UTF8Encoding($false)))
 }
 
 function New-TestVisual {
@@ -170,7 +170,7 @@ catch {
     exit 1
 }
 finally {
-    if (-not $KeepFixture -and $?) {
+    if (-not $KeepFixture -and $script:TestSucceeded) {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
