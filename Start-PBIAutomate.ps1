@@ -16,7 +16,6 @@ $modules = @(
     'src\Services\Alignment\Core\AlignmentAnalyzer.psm1',
     'src\Services\Alignment\Core\AlignmentLayoutEngine.psm1',
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
-    'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Services\Alignment\AlignmentService.psm1',
     'src\UI\PreviewCanvas.psm1',
     'src\UI\MainForm.psm1'

@@ -455,16 +455,9 @@ function Show-PBIAutomateMainForm {
             $state.Analysis = $null
             $state.Layout = $null
             $btnApply.Enabled = $false
-
-            $activeVisuals = @(Get-PbiActivePageVisuals -PageSnapshot $state.Snapshot)
-            $hiddenCount = @($state.Snapshot.Visuals | Where-Object {
-                if ($_.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$_.EffectiveHidden } else { [bool]$_.IsHidden }
-            }).Count
-            $groupCount = @($state.Snapshot.Visuals | Where-Object { [bool]$_.IsVisualGroup }).Count
-
-            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $activeVisuals -Title ('Before - '+$state.Page.DisplayName)
+            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Before - '+$state.Page.DisplayName)
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After - Analyze to preview'
-            Add-Activity ('Page ready: '+$state.Page.DisplayName+' | total='+$state.Snapshot.Visuals.Count+'; active='+$activeVisuals.Count+'; hidden='+$hiddenCount+'; group containers='+$groupCount)
+            Add-Activity ('Page ready: '+$state.Page.DisplayName+' | '+$state.Snapshot.Visuals.Count+' visuals')
         }
         catch { Show-Error $_.Exception.Message }
     }
@@ -506,12 +499,6 @@ function Show-PBIAutomateMainForm {
             $result = Invoke-AlignmentPreview -PageSnapshot $state.Snapshot -Config $config -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $state.Analysis = $result.Analysis
             $state.Layout = $result.Layout
-
-            if ($result.OverlapNormalization.HadOverlaps) {
-                $fallbackText = if ($result.OverlapNormalization.UsedCompactFallback) { '; compact fallback used' } else { '' }
-                Add-Activity ('Pre-normalize overlap: pairs='+$result.OverlapNormalization.InitialOverlapPairCount+'; moved='+$result.OverlapNormalization.MovedCount+'; resized='+$result.OverlapNormalization.ResizedCount+'; remaining='+$result.OverlapNormalization.RemainingOverlapPairCount+$fallbackText)
-            }
-
             $strategyLabel = if ($state.Layout.PSObject.Properties.Name -contains 'LayoutStrategy') { [string]$state.Layout.LayoutStrategy } else { 'Smart Align' }
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$strategyLabel+' | '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
 
@@ -519,7 +506,7 @@ function Show-PBIAutomateMainForm {
             if ($state.Layout.PSObject.Properties.Name -contains 'MaxAreaShareDeltaPercent' -and $null -ne $state.Layout.MaxAreaShareDeltaPercent) {
                 $areaText = '; max occupied-area share drift='+$state.Layout.MaxAreaShareDeltaPercent+'%'
             }
-            Add-Activity ('Alignment: active='+$state.Analysis.ActiveVisualCount+'; hidden ignored='+$state.Analysis.HiddenVisualCount+'; group containers ignored='+$state.Analysis.GroupContainerCount+'; visible grouped children='+$state.Analysis.ActiveGroupedVisualCount+'; '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; strategy='+$strategyLabel+$areaText+'; '+$state.Layout.ChangedCount+' visual(s) would change.')
+            Add-Activity ('Alignment: '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; strategy='+$strategyLabel+$areaText+'; '+$state.Layout.ChangedCount+' visual(s) would change.')
 
             if ($result.Validation.IsValid) {
                 Add-Activity 'Proposed alignment validation passed.'
