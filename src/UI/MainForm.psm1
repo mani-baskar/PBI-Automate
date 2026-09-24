@@ -157,7 +157,7 @@ function Show-PBIAutomateMainForm {
     $workspaceSplit.Name = 'WorkspaceSplit'
     $workspaceSplit.Dock = 'Fill'
     $workspaceSplit.Orientation = 'Vertical'
-    $workspaceSplit.SplitterDistance = 218
+    $workspaceSplit.SplitterDistance = 260
     $workspaceSplit.FixedPanel = 'Panel1'
     $workspaceSplit.IsSplitterFixed = $true
     $rootGrid.Controls.Add($workspaceSplit,0,1)
@@ -204,13 +204,13 @@ function Show-PBIAutomateMainForm {
         $button = New-Object System.Windows.Forms.Button
         $button.Name = ('Service_' + $service.Id)
         $button.Tag = [string]$service.Id
-        $button.Width = 186
+        $button.Width = 228
         $button.Height = 56
         $button.Margin = New-Object System.Windows.Forms.Padding(0,4,0,4)
         $button.FlatStyle = 'Flat'
         $button.FlatAppearance.BorderSize = 0
         $button.TextAlign = 'MiddleLeft'
-        $button.Padding = New-Object System.Windows.Forms.Padding(10,0,4,0)
+        $button.Padding = New-Object System.Windows.Forms.Padding(12,0,8,0)
         $button.ForeColor = [System.Drawing.Color]::White
         $button.BackColor = [System.Drawing.Color]::FromArgb(51,65,85)
         if ([string]$service.Status -eq 'Ready') {
