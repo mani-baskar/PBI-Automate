@@ -9,7 +9,9 @@ $script:TestSucceeded = $false
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-$modules = @(
+$sourceFiles = @(
+    'Start-PBIAutomate.ps1',
+    'src\Core\ConfigService.psm1',
     'src\Core\Logging.psm1',
     'src\Core\ProjectDiscovery.psm1',
     'src\Core\PBIRReader.psm1',
@@ -18,7 +20,33 @@ $modules = @(
     'src\Core\LayoutValidator.psm1',
     'src\Core\BackupService.psm1',
     'src\Core\PBIRWriter.psm1',
-    'src\Core\UndoService.psm1'
+    'src\Core\UndoService.psm1',
+    'src\UI\PreviewCanvas.psm1',
+    'src\UI\MainForm.psm1'
+)
+
+foreach ($relative in $sourceFiles) {
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repoRoot $relative),[ref]$tokens,[ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+        throw ('PowerShell syntax error in ' + $relative + ': ' + (($parseErrors | ForEach-Object { $_.Message }) -join ' | '))
+    }
+}
+
+$modules = @(
+    'src\Core\ConfigService.psm1',
+    'src\Core\Logging.psm1',
+    'src\Core\ProjectDiscovery.psm1',
+    'src\Core\PBIRReader.psm1',
+    'src\Core\LayoutAnalyzer.psm1',
+    'src\Core\SmartLayoutEngine.psm1',
+    'src\Core\LayoutValidator.psm1',
+    'src\Core\BackupService.psm1',
+    'src\Core\PBIRWriter.psm1',
+    'src\Core\UndoService.psm1',
+    'src\UI\PreviewCanvas.psm1',
+    'src\UI\MainForm.psm1'
 )
 
 foreach ($module in $modules) {
@@ -107,6 +135,13 @@ try {
     Write-Host ('Fixture: ' + $fixtureRoot)
     Write-Host ''
 
+    Assert-True $true 'All PowerShell source files parse under Windows PowerShell 5.1'
+    $config = Get-PBIAutomateConfig -RootPath $repoRoot
+    Assert-True ([double]$config.layout.margin -eq 5 -and [double]$config.layout.gap -eq 5) 'Default configuration loads 5-unit margin and gap'
+    $previewControl = New-LayoutPreviewPanel -Title 'CI Preview'
+    Assert-True ($previewControl -is [System.Windows.Forms.Panel]) 'WinForms preview control can be created'
+    $previewControl.Dispose()
+
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
     $resolvedExpected = (Get-Item -LiteralPath $reportFolder).FullName
@@ -134,6 +169,14 @@ try {
     $validation = Test-PbiLayout -Layout $layout
     Assert-True $validation.IsValid 'Proposed layout is in-bounds and has no overlaps'
 
+    $staleOriginal = [System.IO.File]::ReadAllText($a)
+    [System.IO.File]::WriteAllText($a,($staleOriginal + [Environment]::NewLine),(New-Object System.Text.UTF8Encoding($false)))
+    $staleValidation = Test-PbiLayout -Layout $layout
+    Assert-True (-not $staleValidation.IsValid) 'Stale source hash blocks Apply after PBIR changes'
+    [System.IO.File]::WriteAllText($a,$staleOriginal,(New-Object System.Text.UTF8Encoding($false)))
+    $validation = Test-PbiLayout -Layout $layout
+    Assert-True $validation.IsValid 'Layout becomes valid again after source file is restored'
+
     $backup = New-PbiBackup -ProjectRoot $project.ProjectRoot -Items $layout.Items -PageName $pages[0].DisplayName
     Assert-True (Test-Path -LiteralPath $backup.ManifestPath -PathType Leaf) 'Backup manifest is created before write'
     Assert-True (@($backup.Manifest.Entries).Count -eq 3) 'All changed visual files are backed up'
@@ -142,6 +185,9 @@ try {
     Assert-True ($write.Success -and $write.ChangedCount -eq 3) 'Geometry writes complete successfully'
 
     $postSnapshot = Get-PbiPageSnapshot -Page $pages[0]
+    $postAJson = Get-Content -LiteralPath $a -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ($postAJson.visual.visualType -eq 'card') 'Non-geometry visual type/formatting payload remains after write'
+    Assert-True ($postAJson.filterConfig.filters.Count -eq 0) 'Non-geometry filter payload remains after write'
     foreach ($expected in @($layout.Items)) {
         $actual = @($postSnapshot.Visuals | Where-Object { $_.Id -eq $expected.Id })[0]
         Assert-True ([Math]::Abs($actual.X - $expected.X) -le 0.001) ($expected.Id + ' x is verified after write')
