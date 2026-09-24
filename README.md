@@ -11,6 +11,7 @@ V1 focuses on one job: safely clean up a rough Power BI report page layout store
 It can:
 
 - open a `.pbip`, PBIP project folder, or `.Report` folder;
+- resolve the report through PBIP artifact paths when available;
 - discover report pages and show their display names;
 - read visual `x`, `y`, `width`, and `height`;
 - detect approximate rows, columns, and large visual spans;
@@ -71,7 +72,9 @@ The repository includes a dependency-free Windows PowerShell test that creates a
 
 The test covers project discovery, page/visual reading, row/column analysis, smart-layout calculation, validation, backup, write verification, and undo.
 
-This automated test does not replace the Power BI Desktop manual test. Follow [docs/V1-Test-Checklist.md](docs/V1-Test-Checklist.md) before declaring V1 release-ready.
+The current expanded CI suite contains **52 automated assertions** and runs on Windows PowerShell 5.1.
+
+This automated test does not replace the Power BI Desktop manual test. See [docs/V1-Status.md](docs/V1-Status.md) for current progress and follow [docs/V1-Test-Checklist.md](docs/V1-Test-Checklist.md) before declaring V1 release-ready.
 
 ## Project structure
 
