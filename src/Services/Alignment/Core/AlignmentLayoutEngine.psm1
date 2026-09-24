@@ -129,6 +129,7 @@ function New-ProposedItem {
         ParentGroupName = $Item.ParentGroupName
         IsVisualGroup = $Item.IsVisualGroup
         IsHidden = $Item.IsHidden
+        EffectiveHidden = $(if ($Item.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$Item.EffectiveHidden } else { [bool]$Item.IsHidden })
         ProtectionReason = $ProtectionReason
         OldX = [double]$Item.X
         OldY = [double]$Item.Y
