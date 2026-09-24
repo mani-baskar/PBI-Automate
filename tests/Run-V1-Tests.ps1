@@ -198,7 +198,7 @@ try {
     $workspaceShell = Find-ControlByName -Parent $mainForm -Name 'WorkspaceShell'
     Assert-True ($workspaceShell -is [System.Windows.Forms.TableLayoutPanel]) 'Workspace uses TableLayoutPanel instead of DPI-sensitive SplitContainer'
     Assert-True ($workspaceShell.ColumnStyles[0].SizeType -eq [System.Windows.Forms.SizeType]::Absolute) 'Service sidebar column uses absolute width'
-    Assert-True ([Math]::Abs([double]$workspaceShell.ColumnStyles[0].Width - 245) -le 0.01) 'Service sidebar column is fixed at 245 logical pixels'
+    Assert-True ([Math]::Abs([double]$workspaceShell.ColumnStyles[0].Width - 160) -le 0.01) 'Service sidebar column is fixed at 160 logical pixels'
     Assert-True ($null -eq (Find-ControlByName -Parent $mainForm -Name 'WorkspaceSplit')) 'Legacy SplitContainer is removed from workspace'
     Assert-True ($null -ne (Find-ControlByName -Parent $mainForm -Name 'ServiceSidebar')) 'Fixed service sidebar panel exists'
     Assert-True ($null -ne (Find-ControlByName -Parent $mainForm -Name 'Service_alignment')) 'Alignment Correction service appears in navigation'
