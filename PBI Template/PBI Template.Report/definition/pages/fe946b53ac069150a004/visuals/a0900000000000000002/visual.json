@@ -1,0 +1,1 @@
+{"$schema":"https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json","name":"a0900000000000000002","position":{"x":80,"y":3250,"z":1000,"height":330,"width":1840,"tabOrder":0},"visualGroup":{"displayName":"Stacked area chart Grp 1","groupMode":"ScaleMode"},"isHidden":true}
