@@ -5,6 +5,24 @@ function Test-RectangleOverlap {
     return ($A.X -lt ($B.X + $B.Width)) -and (($A.X + $A.Width) -gt $B.X) -and ($A.Y -lt ($B.Y + $B.Height)) -and (($A.Y + $A.Height) -gt $B.Y)
 }
 
+function Test-IntentionalOverlapItem {
+    param(
+        [Parameter(Mandatory=$true)]$Item,
+        [Parameter(Mandatory=$true)]$Layout
+    )
+
+    if ($Item.PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$Item.AllowOverlap) {
+        return $true
+    }
+
+    if ([double]$Layout.PageWidth -le 0 -or [double]$Layout.PageHeight -le 0) {
+        return $false
+    }
+
+    return (([double]$Item.Width / [double]$Layout.PageWidth) -ge 0.90 -and
+            ([double]$Item.Height / [double]$Layout.PageHeight) -ge 0.90)
+}
+
 function Test-PbiLayout {
     [CmdletBinding()]
     param([Parameter(Mandatory=$true)]$Layout)
@@ -45,8 +63,8 @@ function Test-PbiLayout {
 
     for ($i=0; $i -lt $items.Count; $i++) {
         for ($j=$i+1; $j -lt $items.Count; $j++) {
-            $allowA = ($items[$i].PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$items[$i].AllowOverlap)
-            $allowB = ($items[$j].PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$items[$j].AllowOverlap)
+            $allowA = Test-IntentionalOverlapItem -Item $items[$i] -Layout $Layout
+            $allowB = Test-IntentionalOverlapItem -Item $items[$j] -Layout $Layout
 
             if (-not $allowA -and -not $allowB -and (Test-RectangleOverlap -A $items[$i] -B $items[$j])) {
                 $errors.Add(('Overlap detected between {0} and {1}.' -f $items[$i].Id,$items[$j].Id))
