@@ -15,6 +15,12 @@ function Test-IntentionalOverlapItem {
         return $true
     }
 
+    if (($Item.PSObject.Properties.Name -contains 'IsHidden' -and [bool]$Item.IsHidden) -or
+        ($Item.PSObject.Properties.Name -contains 'IsVisualGroup' -and [bool]$Item.IsVisualGroup) -or
+        ($Item.PSObject.Properties.Name -contains 'ParentGroupName' -and -not [string]::IsNullOrWhiteSpace([string]$Item.ParentGroupName))) {
+        return $true
+    }
+
     if ([double]$Layout.PageWidth -le 0 -or [double]$Layout.PageHeight -le 0) {
         return $false
     }
