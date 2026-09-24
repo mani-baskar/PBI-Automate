@@ -284,6 +284,7 @@ function Get-AreaPreservingPbiLayout {
             if ($mainWidth -le 0) { return $null }
 
             $leftHeights = @(Get-ProportionalLengths -Items $leftItems -TotalLength $belowHeight -Gap $Gap)
+            $leftHeightAnchors = @{}
             $cursorY = $belowTop
 
             for ($i = 0; $i -lt $leftItems.Count; $i++) {
