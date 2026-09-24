@@ -20,6 +20,9 @@ function Get-SmartPbiLayout {
                 VisualType=$item.VisualType
                 FilePath=$item.FilePath
                 SourceHash=$item.SourceHash
+                ParentGroupName=$item.ParentGroupName
+                IsVisualGroup=$item.IsVisualGroup
+                IsHidden=$item.IsHidden
                 OldX=[double]$item.X
                 OldY=[double]$item.Y
                 OldWidth=[double]$item.Width
@@ -53,6 +56,9 @@ function Get-SmartPbiLayout {
             VisualType=$item.VisualType
             FilePath=$item.FilePath
             SourceHash=$item.SourceHash
+            ParentGroupName=$item.ParentGroupName
+            IsVisualGroup=$item.IsVisualGroup
+            IsHidden=$item.IsHidden
             OldX=[double]$item.X
             OldY=[double]$item.Y
             OldWidth=[double]$item.Width
