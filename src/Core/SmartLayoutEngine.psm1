@@ -11,11 +11,64 @@ function Get-SmartPbiLayout {
     $cellWidth=$usableWidth/$columns; $cellHeight=$usableHeight/$rows
     $proposed=@()
     foreach ($item in @($Analysis.Items)) {
-        $col=[Math]::Min([Math]::Max(0,[int]$item.Column),$columns-1); $row=[Math]::Min([Math]::Max(0,[int]$item.Row),$rows-1)
-        $colSpan=[Math]::Min([Math]::Max(1,[int]$item.ColumnSpan),$columns-$col); $rowSpan=[Math]::Min([Math]::Max(1,[int]$item.RowSpan),$rows-$row)
-        $x=$Margin+($col*($cellWidth+$Gap)); $y=$Margin+($row*($cellHeight+$Gap))
-        $width=($cellWidth*$colSpan)+($Gap*($colSpan-1)); $height=($cellHeight*$rowSpan)+($Gap*($rowSpan-1))
-        $proposed += [pscustomobject]@{ Id=$item.Id; VisualType=$item.VisualType; FilePath=$item.FilePath; SourceHash=$item.SourceHash; OldX=[double]$item.X; OldY=[double]$item.Y; OldWidth=[double]$item.Width; OldHeight=[double]$item.Height; X=[Math]::Round($x,3); Y=[Math]::Round($y,3); Width=[Math]::Round($width,3); Height=[Math]::Round($height,3); Column=$col; Row=$row; ColumnSpan=$colSpan; RowSpan=$rowSpan; Changed=([Math]::Abs($item.X-$x) -gt 0.001 -or [Math]::Abs($item.Y-$y) -gt 0.001 -or [Math]::Abs($item.Width-$width) -gt 0.001 -or [Math]::Abs($item.Height-$height) -gt 0.001) }
+        $isLocked = ($item.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$item.IsLocked)
+        $allowOverlap = ($item.PSObject.Properties.Name -contains 'AllowOverlap' -and [bool]$item.AllowOverlap)
+
+        if ($isLocked) {
+            $proposed += [pscustomobject]@{
+                Id=$item.Id
+                VisualType=$item.VisualType
+                FilePath=$item.FilePath
+                SourceHash=$item.SourceHash
+                OldX=[double]$item.X
+                OldY=[double]$item.Y
+                OldWidth=[double]$item.Width
+                OldHeight=[double]$item.Height
+                X=[double]$item.X
+                Y=[double]$item.Y
+                Width=[double]$item.Width
+                Height=[double]$item.Height
+                Column=0
+                Row=0
+                ColumnSpan=1
+                RowSpan=1
+                IsLocked=$true
+                AllowOverlap=$allowOverlap
+                Changed=$false
+            }
+            continue
+        }
+
+        $col=[Math]::Min([Math]::Max(0,[int]$item.Column),$columns-1)
+        $row=[Math]::Min([Math]::Max(0,[int]$item.Row),$rows-1)
+        $colSpan=[Math]::Min([Math]::Max(1,[int]$item.ColumnSpan),$columns-$col)
+        $rowSpan=[Math]::Min([Math]::Max(1,[int]$item.RowSpan),$rows-$row)
+        $x=$Margin+($col*($cellWidth+$Gap))
+        $y=$Margin+($row*($cellHeight+$Gap))
+        $width=($cellWidth*$colSpan)+($Gap*($colSpan-1))
+        $height=($cellHeight*$rowSpan)+($Gap*($rowSpan-1))
+
+        $proposed += [pscustomobject]@{
+            Id=$item.Id
+            VisualType=$item.VisualType
+            FilePath=$item.FilePath
+            SourceHash=$item.SourceHash
+            OldX=[double]$item.X
+            OldY=[double]$item.Y
+            OldWidth=[double]$item.Width
+            OldHeight=[double]$item.Height
+            X=[Math]::Round($x,3)
+            Y=[Math]::Round($y,3)
+            Width=[Math]::Round($width,3)
+            Height=[Math]::Round($height,3)
+            Column=$col
+            Row=$row
+            ColumnSpan=$colSpan
+            RowSpan=$rowSpan
+            IsLocked=$false
+            AllowOverlap=$false
+            Changed=([Math]::Abs($item.X-$x) -gt 0.001 -or [Math]::Abs($item.Y-$y) -gt 0.001 -or [Math]::Abs($item.Width-$width) -gt 0.001 -or [Math]::Abs($item.Height-$height) -gt 0.001)
+        }
     }
     [pscustomobject]@{ PageWidth=[double]$Analysis.PageWidth; PageHeight=[double]$Analysis.PageHeight; Margin=$Margin; Gap=$Gap; Columns=$columns; Rows=$rows; CellWidth=[Math]::Round($cellWidth,3); CellHeight=[Math]::Round($cellHeight,3); Items=$proposed; ChangedCount=@($proposed | Where-Object { $_.Changed }).Count }
 }
