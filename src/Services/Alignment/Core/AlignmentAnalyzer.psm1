@@ -337,6 +337,10 @@ function Get-PbiLayoutAnalysis {
             IsHidden = $v.IsHidden
             EffectiveHidden = $(if ($v.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$v.EffectiveHidden } else { [bool]$v.IsHidden })
             ProtectionReason = $null
+            OriginalX = $(if ($v.PSObject.Properties.Name -contains 'OriginalX') { [double]$v.OriginalX } else { [double]$v.X })
+            OriginalY = $(if ($v.PSObject.Properties.Name -contains 'OriginalY') { [double]$v.OriginalY } else { [double]$v.Y })
+            OriginalWidth = $(if ($v.PSObject.Properties.Name -contains 'OriginalWidth') { [double]$v.OriginalWidth } else { [double]$v.Width })
+            OriginalHeight = $(if ($v.PSObject.Properties.Name -contains 'OriginalHeight') { [double]$v.OriginalHeight } else { [double]$v.Height })
             X = [double]$v.X
             Y = [double]$v.Y
             Width = [double]$v.Width
