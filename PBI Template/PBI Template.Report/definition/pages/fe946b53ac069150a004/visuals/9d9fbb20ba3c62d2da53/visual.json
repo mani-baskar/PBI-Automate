@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "a5b03616d51aed869de3",
+  "name": "9d9fbb20ba3c62d2da53",
   "position": {
     "x": 0,
-    "y": 0,
-    "z": 2000,
+    "y": 800,
+    "z": 2002,
     "height": 50,
     "width": 1920.0000000000002,
-    "tabOrder": 2000
+    "tabOrder": 13002
   },
   "visual": {
     "visualType": "textbox",
@@ -19,7 +19,7 @@
               {
                 "textRuns": [
                   {
-                    "value": "Stacked bar chart",
+                    "value": "Clustered Bar Chart",
                     "textStyle": {
                       "fontWeight": "bold",
                       "fontSize": "24pt"
@@ -40,7 +40,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Stacked bar'"
+                  "Value": "'Stacked Column'"
                 }
               }
             }
