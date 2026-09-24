@@ -2,7 +2,7 @@ Set-StrictMode -Version 2.0
 
 function Format-InvariantNumber {
     param([double]$Value)
-    return $Value.ToString('0.###',[Globalization.CultureInfo]::InvariantCulture)
+    return $Value.ToString('0.###',[System.Globalization.CultureInfo]::InvariantCulture)
 }
 
 function Set-PositionNumberInText {
@@ -41,14 +41,14 @@ function Set-PbiLayoutFiles {
         foreach ($item in $changed) {
             $target = [string]$item.FilePath
             if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw ('visual.json missing before write: {0}' -f $target) }
-            $text = [IO.File]::ReadAllText($target)
+            $text = [System.IO.File]::ReadAllText($target)
             $updated = Set-PositionNumberInText -Text $text -Property 'x' -Value $item.X
             $updated = Set-PositionNumberInText -Text $updated -Property 'y' -Value $item.Y
             $updated = Set-PositionNumberInText -Text $updated -Property 'width' -Value $item.Width
             $updated = Set-PositionNumberInText -Text $updated -Property 'height' -Value $item.Height
 
             $temp = $target + '.pbiautomate.tmp'
-            [IO.File]::WriteAllText($temp,$updated,(New-Object Text.UTF8Encoding($false)))
+            [System.IO.File]::WriteAllText($temp,$updated,(New-Object System.Text.UTF8Encoding($false)))
             try {
                 $null = Get-Content -LiteralPath $temp -Raw -Encoding UTF8 | ConvertFrom-Json
                 if (-not (Test-GeometryInJsonFile -Path $temp -Item $item)) { throw ('Temporary geometry validation failed for {0}' -f $item.Id) }
