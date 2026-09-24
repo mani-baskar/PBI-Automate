@@ -196,10 +196,28 @@ try {
     Assert-True ($realWideMiddle.ColumnSpan -eq 2) 'Wide middle visual preserves its two-column span'
     Assert-True ($realBottom.ColumnSpan -eq 5) 'Bottom visual preserves its five-column span'
 
-    $realLayout = Get-SmartPbiLayout -Analysis $realAnalysis -Margin 5 -Gap 5
+    $realLayout = Get-SmartPbiLayout -Analysis $realAnalysis -Margin 10 -Gap 10
     $realValidation = Test-PbiLayout -Layout $realLayout
     Assert-True $realValidation.IsValid 'Real PBIP Smart Align proposal has no unintended overlaps'
     Assert-True ($realLayout.Columns -eq 6 -and $realLayout.Rows -eq 3) 'Real PBIP preview uses 6 x 3 topology instead of 8 x 6'
+    Assert-True ($realLayout.LayoutStrategy -eq 'Area Preserve') 'Real PBIP uses area-preserving anchored layout strategy'
+    Assert-True ($realLayout.MaxAreaShareDeltaPercent -le 1.0) 'Real PBIP preserves each visual share of occupied area within 1 percentage point'
+
+    $realTop = @($realLayout.Items | Where-Object { -not $_.IsLocked -and $_.Row -eq 0 } | Sort-Object X)
+    Assert-True (@($realTop | Select-Object -ExpandProperty Y -Unique).Count -eq 1) 'Top horizontal visuals share one exact Y line'
+    Assert-True (@($realTop | Select-Object -ExpandProperty Height -Unique).Count -eq 1) 'Top horizontal visuals share one exact height'
+    for ($i = 1; $i -lt $realTop.Count; $i++) {
+        $actualGap = [double]$realTop[$i].X - ([double]$realTop[$i-1].X + [double]$realTop[$i-1].Width)
+        Assert-True ([Math]::Abs($actualGap - 10) -le 0.01) ('Top visual gap ' + $i + ' is exactly 10 units')
+    }
+
+    $middleRow = @($realLayout.Items | Where-Object { -not $_.IsLocked -and $_.Row -eq 1 -and $_.Column -gt 0 } | Sort-Object X)
+    Assert-True (@($middleRow | Select-Object -ExpandProperty Y -Unique).Count -eq 1) 'Inner middle visuals share one exact Y line'
+    Assert-True (@($middleRow | Select-Object -ExpandProperty Height -Unique).Count -eq 1) 'Inner middle visuals share one exact row height'
+    for ($i = 1; $i -lt $middleRow.Count; $i++) {
+        $actualGap = [double]$middleRow[$i].X - ([double]$middleRow[$i-1].X + [double]$middleRow[$i-1].Width)
+        Assert-True ([Math]::Abs($actualGap - 10) -le 0.01) ('Inner visual gap ' + $i + ' is exactly 10 units')
+    }
 
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
