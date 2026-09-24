@@ -14,6 +14,28 @@ function Get-FileTextEncoding {
     }
     return (New-Object System.Text.UTF8Encoding($false))
 }
+function Complete-PbiBackupManifest {
+    param(
+        [Parameter(Mandatory=$true)][string]$ManifestPath,
+        [Parameter(Mandatory=$true)][string]$Status
+    )
+
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return }
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    foreach ($entry in @($manifest.Entries)) {
+        if (Test-Path -LiteralPath $entry.TargetPath -PathType Leaf) {
+            $appliedHash = (Get-FileHash -LiteralPath $entry.TargetPath -Algorithm SHA256).Hash
+            $entry | Add-Member -MemberType NoteProperty -Name AppliedHash -Value $appliedHash -Force
+        }
+    }
+
+    $manifest.Status = $Status
+    $manifest | Add-Member -MemberType NoteProperty -Name AppliedAt -Value ((Get-Date).ToString('o')) -Force
+    $json = $manifest | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($ManifestPath,$json,(New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Format-InvariantNumber {
     param([double]$Value)
     return $Value.ToString('0.###',[System.Globalization.CultureInfo]::InvariantCulture)
@@ -82,6 +104,7 @@ function Set-PbiLayoutFiles {
             if (-not (Test-GeometryInJsonFile -Path $target -Item $item)) { throw ('Final geometry validation failed for {0}' -f $item.Id) }
             $written.Add($target)
         }
+        Complete-PbiBackupManifest -ManifestPath $BackupOperation.ManifestPath -Status 'Applied'
         return [pscustomobject]@{ Success=$true; ChangedCount=$written.Count; Files=@($written) }
     }
     catch {
