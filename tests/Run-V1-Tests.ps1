@@ -108,7 +108,9 @@ try {
     Write-Host ''
 
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
-    Assert-True ($project.ReportFolder -eq $reportFolder) 'PBIP project resolves its enhanced .Report folder'
+    $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
+    $resolvedExpected = (Get-Item -LiteralPath $reportFolder).FullName
+    Assert-True ($resolvedActual -ieq $resolvedExpected) 'PBIP project resolves its enhanced .Report folder'
 
     $pages = @(Get-PbiPages -ReportFolder $project.ReportFolder)
     Assert-True ($pages.Count -eq 1) 'Exactly one page is discovered'
@@ -160,13 +162,13 @@ try {
     Assert-True ($tempFiles.Count -eq 0) 'No temporary write files remain in the PBIP project'
 
     Write-Host ''
-    Write-Host ('SUCCESS — ' + $script:Passed + ' assertions passed.') -ForegroundColor Green
+    Write-Host ('SUCCESS - ' + $script:Passed + ' assertions passed.') -ForegroundColor Green
     $script:TestSucceeded = $true
     exit 0
 }
 catch {
     Write-Host ''
-    Write-Host ('FAILED — ' + $_.Exception.Message) -ForegroundColor Red
+    Write-Host ('FAILED - ' + $_.Exception.Message) -ForegroundColor Red
     Write-Host $_.ScriptStackTrace
     Write-Host ('Fixture retained for inspection: ' + $fixtureRoot) -ForegroundColor Yellow
     exit 1
