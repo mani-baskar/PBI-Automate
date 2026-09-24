@@ -120,21 +120,41 @@ A V1 that merely moves a few rectangles is not complete.
 
 ## Architecture
 
-Keep these modules independent:
+PBI Automate is a service-oriented desktop shell.
 
-- `ProjectDiscovery.psm1`: resolve PBIP/report paths.
-- `PBIRReader.psm1`: read pages and visual geometry.
-- `LayoutAnalyzer.psm1`: infer rows, columns, peers, and spans.
-- `SmartLayoutEngine.psm1`: create proposed geometry.
-- `LayoutValidator.psm1`: validate bounds and collisions.
-- `BackupService.psm1`: create/restore operation backups.
-- `PBIRWriter.psm1`: write only geometry and verify.
-- `UndoService.psm1`: restore latest backup.
-- `Logging.psm1`: user-local logs.
-- `PreviewCanvas.psm1`: render schematic before/after previews.
-- `MainForm.psm1`: WinForms orchestration only.
+Shared infrastructure belongs in:
 
-Do not move core layout logic into button click handlers.
+- `src/Core/ProjectDiscovery.psm1` — resolve PBIP/report artifacts.
+- `src/Core/PBIRReader.psm1` — read pages and visual geometry.
+- `src/Core/BackupService.psm1` — operation backups.
+- `src/Core/PBIRWriter.psm1` — safe PBIR writes.
+- `src/Core/UndoService.psm1` — restore successful operations.
+- `src/Core/Logging.psm1` — user-local logs.
+- `src/Core/ConfigService.psm1` — product defaults.
+
+Feature logic belongs under `src/Services/<ServiceName>/`.
+
+Current services:
+
+- `Alignment/` — implemented.
+  - `AlignmentService.psm1` is the service facade used by UI.
+  - `Core/AlignmentAnalyzer.psm1`
+  - `Core/AlignmentLayoutEngine.psm1`
+  - `Core/AlignmentValidator.psm1`
+- `Formatting/` — Coming Soon.
+- `Theme/` — Coming Soon.
+- `VisualCopyPaste/` — Coming Soon.
+
+`src/Services/ServiceRegistry.psm1` is the single navigation/service catalog.
+
+UI belongs under `src/UI/`:
+
+- `MainForm.psm1` owns the reusable software shell and event wiring.
+- `PreviewCanvas.psm1` owns schematic visual rendering.
+
+The shell order is: common PBIP project bar → service navigation → selected service options → service content/preview → common processing footer.
+
+Do not put feature algorithms into `MainForm.psm1`. Do not put Alignment-specific rules back into `src/Core`. Each future feature must get its own service folder and facade.
 
 ## Smart-layout behavior
 
