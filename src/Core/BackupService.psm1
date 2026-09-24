@@ -10,9 +10,9 @@ function Get-BackupRoot {
 
 function Get-ProjectBackupKey {
     param([Parameter(Mandatory=$true)][string]$ProjectRoot)
-    $normalized = ([IO.Path]::GetFullPath($ProjectRoot)).ToLowerInvariant()
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { $hash = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($normalized)) } finally { $sha.Dispose() }
+    $normalized = ([System.IO.Path]::GetFullPath($ProjectRoot)).ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($normalized)) } finally { $sha.Dispose() }
     $hex = -join ($hash | ForEach-Object { $_.ToString('x2') })
     $leaf = Split-Path -Leaf $ProjectRoot
     if ([string]::IsNullOrWhiteSpace($leaf)) { $leaf = 'project' }
@@ -50,7 +50,7 @@ function New-PbiBackup {
     }
     $manifestPath = Join-Path $operationDir 'manifest.json'
     $json = $manifest | ConvertTo-Json -Depth 8
-    [IO.File]::WriteAllText($manifestPath,$json,(New-Object Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($manifestPath,$json,(New-Object System.Text.UTF8Encoding($false)))
 
     [pscustomobject]@{ Directory=$operationDir; ManifestPath=$manifestPath; Manifest=$manifest }
 }
