@@ -357,7 +357,7 @@ function Get-AreaPreservingPbiLayout {
 
             # If the primary-left height anchors cannot fit, fall back to
             # proportional heights rather than force an invalid layout.
-            $useHeightAnchors = ($anchoredHeightTotal -lt ($mainUsableHeight - 0.01))
+            $useHeightAnchors = ($anchoredHeightTotal -le ($mainUsableHeight + 0.01))
             if (-not $useHeightAnchors) {
                 $anchoredHeightTotal = 0.0
                 $flexDemandTotal = [double](($rowGroups | Measure-Object -Property DemandHeight -Sum).Sum)
