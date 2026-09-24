@@ -157,8 +157,9 @@ function Show-PBIAutomateMainForm {
     $workspaceSplit.Name = 'WorkspaceSplit'
     $workspaceSplit.Dock = 'Fill'
     $workspaceSplit.Orientation = 'Vertical'
-    $workspaceSplit.SplitterDistance = 260
+    $workspaceSplit.SplitterDistance = 275
     $workspaceSplit.FixedPanel = 'Panel1'
+    $workspaceSplit.Panel1MinSize = 250
     $workspaceSplit.IsSplitterFixed = $true
     $rootGrid.Controls.Add($workspaceSplit,0,1)
 
@@ -183,12 +184,17 @@ function Show-PBIAutomateMainForm {
     $svcTitle.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
     $navGrid.Controls.Add($svcTitle,0,0)
 
-    $serviceList = New-Object System.Windows.Forms.FlowLayoutPanel
+    $serviceList = New-Object System.Windows.Forms.TableLayoutPanel
     $serviceList.Name = 'ServiceNavigation'
     $serviceList.Dock = 'Fill'
-    $serviceList.FlowDirection = 'TopDown'
-    $serviceList.WrapContents = $false
-    $serviceList.AutoScroll = $true
+    $serviceList.AutoScroll = $false
+    $serviceList.ColumnCount = 1
+    $serviceList.RowCount = ($services.Count + 1)
+    [void]$serviceList.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
+    for ($serviceRow = 0; $serviceRow -lt $services.Count; $serviceRow++) {
+        [void]$serviceList.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute,64)))
+    }
+    [void]$serviceList.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
     $serviceList.Padding = New-Object System.Windows.Forms.Padding(0,2,0,0)
     $navGrid.Controls.Add($serviceList,0,1)
 
@@ -200,11 +206,12 @@ function Show-PBIAutomateMainForm {
     $navGrid.Controls.Add($versionLabel,0,2)
 
     $serviceButtons = @{}
+    $serviceRowIndex = 0
     foreach ($service in $services) {
         $button = New-Object System.Windows.Forms.Button
         $button.Name = ('Service_' + $service.Id)
         $button.Tag = [string]$service.Id
-        $button.Width = 228
+        $button.Dock = 'Fill'
         $button.Height = 56
         $button.Margin = New-Object System.Windows.Forms.Padding(0,4,0,4)
         $button.FlatStyle = 'Flat'
@@ -219,8 +226,9 @@ function Show-PBIAutomateMainForm {
         else {
             $button.Text = ([string]$service.Name + "`r`nComing Soon")
         }
-        [void]$serviceList.Controls.Add($button)
+        $serviceList.Controls.Add($button,0,$serviceRowIndex)
         $serviceButtons[[string]$service.Id] = $button
+        $serviceRowIndex++
     }
 
     $workspace = $workspaceSplit.Panel2
