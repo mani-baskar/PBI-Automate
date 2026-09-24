@@ -55,6 +55,21 @@ function Get-MedianNumber {
     return ([double]$sorted[$mid - 1] + [double]$sorted[$mid]) / 2.0
 }
 
+function Test-NearAnchorDimension {
+    param(
+        [Parameter(Mandatory=$true)][double]$Value,
+        [Parameter(Mandatory=$true)][double]$Anchor,
+        [Parameter(Mandatory=$true)][double]$Gap
+    )
+
+    if ($Value -le 0 -or $Anchor -le 0) { return $false }
+
+    # A small existing difference is treated as accidental manual drift.
+    # The primary top/left anchor wins instead of moving an already-good edge.
+    $threshold = [Math]::Max(($Gap * 2.0),($Anchor * 0.12))
+    return ([Math]::Abs($Value - $Anchor) -le $threshold)
+}
+
 function Get-ProportionalLengths {
     param(
         [Parameter(Mandatory=$true)][object[]]$Items,
@@ -243,7 +258,19 @@ function Get-AreaPreservingPbiLayout {
             $leftWidth = $horizontalUsable * $leftRatio
 
             $leftOriginalMedianWidth = Get-MedianNumber -Values ([double[]]@($leftItems | ForEach-Object { $_.Width }))
-            if ($leftOriginalMedianWidth -gt 0) {
+            $topLeftOriginalWidth = if ($topItems.Count -gt 0) { [double]$topItems[0].Width } else { 0.0 }
+            $topLeftProposedWidth = if ($topWidths.Count -gt 0) { [double]$topWidths[0] } else { 0.0 }
+            $leftWidthAnchoredToTop = $false
+
+            if ($leftOriginalMedianWidth -gt 0 -and $topLeftOriginalWidth -gt 0 -and
+                (Test-NearAnchorDimension -Value $leftOriginalMedianWidth -Anchor $topLeftOriginalWidth -Gap $Gap)) {
+                # Top is the primary horizontal anchor. If the left stack was
+                # already almost the same width, preserve that alignment exactly
+                # and let the inner content absorb the remaining width.
+                $leftWidth = $topLeftProposedWidth
+                $leftWidthAnchoredToTop = $true
+            }
+            elseif ($leftOriginalMedianWidth -gt 0) {
                 $leftWidth = [Math]::Max($leftWidth,[Math]::Min($horizontalUsable * 0.40,$leftOriginalMedianWidth))
             }
 
@@ -350,6 +377,7 @@ function Get-AreaPreservingPbiLayout {
         Columns = [int]$Analysis.ColumnCount
         Rows = [int]$Analysis.RowCount
         LayoutStrategy = 'Area Preserve'
+        AnchorSnapUsed = [bool]($null -ne (Get-Variable -Name leftWidthAnchoredToTop -Scope 0 -ErrorAction SilentlyContinue) -and $leftWidthAnchoredToTop)
         MaxAreaShareDeltaPercent = [Math]::Round($maxShareDelta,2)
         Items = $proposed
         ChangedCount = @($proposed | Where-Object { $_.Changed }).Count
