@@ -28,7 +28,19 @@ function Test-PbiLayout {
         if ($item.Width -le 0 -or $item.Height -le 0) { $errors.Add(('{0}: width/height must be positive.' -f $item.Id)) }
         if (($item.X + $item.Width) -gt ($Layout.PageWidth + 0.01)) { $errors.Add(('{0}: visual exceeds page width.' -f $item.Id)) }
         if (($item.Y + $item.Height) -gt ($Layout.PageHeight + 0.01)) { $errors.Add(('{0}: visual exceeds page height.' -f $item.Id)) }
-        if (-not (Test-Path -LiteralPath $item.FilePath -PathType Leaf)) { $errors.Add(('{0}: source visual.json no longer exists.' -f $item.Id)) }
+        if (-not (Test-Path -LiteralPath $item.FilePath -PathType Leaf)) {
+            $errors.Add(('{0}: source visual.json no longer exists.' -f $item.Id))
+        } elseif ($item.PSObject.Properties.Name -contains 'SourceHash' -and -not [string]::IsNullOrWhiteSpace([string]$item.SourceHash)) {
+            $currentHash = (Get-FileHash -LiteralPath $item.FilePath -Algorithm SHA256).Hash
+            if ($currentHash -ne [string]$item.SourceHash) {
+                $errors.Add(('{0}: visual.json changed after analysis. Re-analyze before applying.' -f $item.Id))
+            }
+        } elseif ($item.PSObject.Properties.Name -contains 'FileHash' -and -not [string]::IsNullOrWhiteSpace([string]$item.FileHash)) {
+            $currentHash = (Get-FileHash -LiteralPath $item.FilePath -Algorithm SHA256).Hash
+            if ($currentHash -ne [string]$item.FileHash) {
+                $errors.Add(('{0}: visual.json changed while validating. Reload the page.' -f $item.Id))
+            }
+        }
     }
 
     for ($i=0; $i -lt $items.Count; $i++) {
