@@ -506,6 +506,12 @@ function Show-PBIAutomateMainForm {
             $result = Invoke-AlignmentPreview -PageSnapshot $state.Snapshot -Config $config -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $state.Analysis = $result.Analysis
             $state.Layout = $result.Layout
+
+            if ($result.OverlapNormalization.HadOverlaps) {
+                $fallbackText = if ($result.OverlapNormalization.UsedCompactFallback) { '; compact fallback used' } else { '' }
+                Add-Activity ('Pre-normalize overlap: pairs='+$result.OverlapNormalization.InitialOverlapPairCount+'; moved='+$result.OverlapNormalization.MovedCount+'; resized='+$result.OverlapNormalization.ResizedCount+'; remaining='+$result.OverlapNormalization.RemainingOverlapPairCount+$fallbackText)
+            }
+
             $strategyLabel = if ($state.Layout.PSObject.Properties.Name -contains 'LayoutStrategy') { [string]$state.Layout.LayoutStrategy } else { 'Smart Align' }
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$strategyLabel+' | '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
 
