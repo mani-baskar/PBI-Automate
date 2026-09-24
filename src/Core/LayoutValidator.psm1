@@ -19,8 +19,33 @@ function Test-IntentionalOverlapItem {
         return $false
     }
 
-    return (([double]$Item.Width / [double]$Layout.PageWidth) -ge 0.90 -and
-            ([double]$Item.Height / [double]$Layout.PageHeight) -ge 0.90)
+    $widthRatio = [double]$Item.Width / [double]$Layout.PageWidth
+    $heightRatio = [double]$Item.Height / [double]$Layout.PageHeight
+
+    if ($widthRatio -ge 0.90 -and $heightRatio -ge 0.90) {
+        return $true
+    }
+
+    $type = ([string]$Item.VisualType).ToLowerInvariant()
+    $structuralTypes = @(
+        'textbox',
+        'shape',
+        'basicshape',
+        'image',
+        'button',
+        'actionbutton',
+        'navigationbutton',
+        'pagenavigator',
+        'bookmarknavigator',
+        'visualgroup'
+    )
+
+    if ($structuralTypes -notcontains $type) {
+        return $false
+    }
+
+    return (($widthRatio -ge 0.75 -and $heightRatio -le 0.18) -or
+            ($heightRatio -ge 0.75 -and $widthRatio -le 0.18))
 }
 
 function Test-PbiLayout {
