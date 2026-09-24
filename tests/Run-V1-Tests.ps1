@@ -155,6 +155,10 @@ try {
     $previewControl = New-LayoutPreviewPanel -Title 'CI Preview'
     Assert-True ($previewControl -is [System.Windows.Forms.Panel]) 'WinForms preview control can be created'
     $previewControl.Dispose()
+    $mainForm = Show-PBIAutomateMainForm -RootPath $repoRoot -BuildOnly
+    Assert-True ($mainForm -is [System.Windows.Forms.Form]) 'Full WinForms main window builds without showing it'
+    Assert-True ($mainForm.Text -like 'PBI Automate*') 'Main window title is configured'
+    $mainForm.Dispose()
 
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
