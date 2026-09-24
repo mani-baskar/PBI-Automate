@@ -1,0 +1,17 @@
+{
+  "productName": "PBI Automate",
+  "version": "0.1.0-dev",
+  "layout": {
+    "mode": "Smart Align",
+    "margin": 5,
+    "gap": 5,
+    "toleranceMode": "Auto",
+    "minimumTolerance": 3,
+    "maximumTolerance": 120
+  },
+  "safety": {
+    "backupBeforeApply": true,
+    "validateBeforeApply": true,
+    "validateAfterApply": true
+  }
+}

@@ -1,0 +1,16 @@
+# PBI Automate local/runtime files
+*.log
+*.tmp
+*.pbiautomate.tmp
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local test/report material
+samples/private/
+test-output/
+
+# Power BI local/user-specific artifacts
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
