@@ -133,10 +133,6 @@ try {
     $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC' -X 9 -Y 151 -Width 383 -Height 140 -Type 'barChart'
 
     $originalHash = @{}
-    $undoneManifest = Get-Content -LiteralPath $backup.ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    Assert-True ([string]$undoneManifest.Status -eq 'Undone') 'Undo marks the latest operation as Undone'
-    Assert-Throws { Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot | Out-Null } 'A completed Undo cannot be repeated accidentally'
-
     foreach ($path in @($a,$b,$c)) {
         $originalHash[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     }
@@ -218,6 +214,10 @@ try {
 
     $undo = Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot
     Assert-True ($undo.Success -and $undo.RestoredCount -eq 3) 'Undo restores the most recent operation'
+
+    $undoneManifest = Get-Content -LiteralPath $backup.ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ([string]$undoneManifest.Status -eq 'Undone') 'Undo marks the latest operation as Undone'
+    Assert-Throws { Undo-LatestPbiApply -ProjectRoot $project.ProjectRoot | Out-Null } 'A completed Undo cannot be repeated accidentally'
 
     foreach ($path in @($a,$b,$c)) {
         $restored = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
