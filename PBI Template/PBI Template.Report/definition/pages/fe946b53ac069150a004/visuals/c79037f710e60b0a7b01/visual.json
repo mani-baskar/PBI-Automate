@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
+  "name": "c79037f710e60b0a7b01",
+  "position": {
+    "x": 0,
+    "y": 50,
+    "z": 0,
+    "height": 330,
+    "width": 1920,
+    "tabOrder": 1000
+  },
+  "visualGroup": {
+    "displayName": "Stacked bar chart Grp 2",
+    "groupMode": "ScaleMode"
+  }
+}

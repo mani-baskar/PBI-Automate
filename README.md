@@ -6,13 +6,14 @@ Open-source Windows automation toolkit for Power BI PBIP projects.
 
 > **Development status:** V1 is under active development on `dev/v1-smart-layout`. The `main` branch is intentionally kept clean until V1 has passed Windows + Power BI Desktop manual verification.
 
-## V1 — Smart Layout
+## Current Service — Alignment Correction
 
-V1 focuses on one job: safely clean up a rough Power BI report page layout stored in enhanced PBIR.
+PBI Automate is now structured as a multi-service desktop shell. Alignment Correction is the first implemented service; Change Format, Theme Creation and Visual Copy Paste are visible in the UI as Coming Soon services.
 
 It can:
 
-- open a `.pbip`, PBIP project folder, or `.Report` folder;
+- select a `.pbip` project from the common project bar;
+- refresh the same project instantly after manually saving changes in Power BI Desktop;
 - resolve the report through PBIP artifact paths when available;
 - discover report pages and show their display names;
 - read visual `x`, `y`, `width`, and `height`;
@@ -74,7 +75,7 @@ The repository includes a dependency-free Windows PowerShell test that creates a
 
 The test covers project discovery, page/visual reading, row/column analysis, smart-layout calculation, validation, backup, write verification, and undo.
 
-The current expanded CI suite contains **52 automated assertions** and runs on Windows PowerShell 5.1.
+CI runs the dependency-free integration suite on Windows PowerShell 5.1.
 
 This automated test does not replace the Power BI Desktop manual test. See [docs/V1-Status.md](docs/V1-Status.md) for current progress and follow [docs/V1-Test-Checklist.md](docs/V1-Test-Checklist.md) before declaring V1 release-ready.
 
@@ -88,12 +89,18 @@ PBI-Automate/
 ├─ config/
 ├─ docs/
 ├─ src/
-│  ├─ Core/
-│  └─ UI/
+│  ├─ Core/                     # shared PBIP/PBIR infrastructure
+│  ├─ Services/
+│  │  ├─ ServiceRegistry.psm1
+│  │  ├─ Alignment/            # implemented service
+│  │  ├─ Formatting/           # Coming Soon
+│  │  ├─ Theme/                # Coming Soon
+│  │  └─ VisualCopyPaste/      # Coming Soon
+│  └─ UI/                      # reusable WinForms shell
 └─ tests/
 ```
 
-Core logic is deliberately separated from WinForms so future services can reuse the same PBIP/PBIR engine.
+Service-specific algorithms stay inside their service folder. Shared PBIP file access, backups, writing, undo and logging stay in Core. This keeps future Power BI automation features independent and easier to maintain.
 
 ## Safety
 

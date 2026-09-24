@@ -13,7 +13,7 @@ function Get-PBIAutomateConfig {
             gap = 5
             toleranceMode = 'Auto'
             minimumTolerance = 3
-            maximumTolerance = 24
+            maximumTolerance = 120
         }
         safety = [pscustomobject]@{
             backupBeforeApply = $true
