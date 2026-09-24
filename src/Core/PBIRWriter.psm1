@@ -34,7 +34,8 @@ function Set-PositionNumberInText {
 
 function Test-GeometryInJsonFile {
     param([string]$Path,$Item)
-    $json = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $encoding = Get-FileTextEncoding -Path $Path
+    $json = [System.IO.File]::ReadAllText($Path,$encoding) | ConvertFrom-Json
     if (-not ($json.PSObject.Properties.Name -contains 'position')) { return $false }
     $p = $json.position
     return ([Math]::Abs(([double]$p.x)-$Item.X) -le 0.001) -and ([Math]::Abs(([double]$p.y)-$Item.Y) -le 0.001) -and ([Math]::Abs(([double]$p.width)-$Item.Width) -le 0.001) -and ([Math]::Abs(([double]$p.height)-$Item.Height) -le 0.001)
@@ -71,7 +72,7 @@ function Set-PbiLayoutFiles {
             $temp = $target + '.pbiautomate.tmp'
             [System.IO.File]::WriteAllText($temp,$updated,$encoding)
             try {
-                $null = Get-Content -LiteralPath $temp -Raw -Encoding UTF8 | ConvertFrom-Json
+                $null = [System.IO.File]::ReadAllText($temp,$encoding) | ConvertFrom-Json
                 if (-not (Test-GeometryInJsonFile -Path $temp -Item $item)) { throw ('Temporary geometry validation failed for {0}' -f $item.Id) }
                 Move-Item -LiteralPath $temp -Destination $target -Force
             } finally {
