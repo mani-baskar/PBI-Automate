@@ -177,8 +177,13 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Analysis = Get-PbiLayoutAnalysis -PageSnapshot $state.Snapshot -MinimumTolerance ([double]$config.layout.minimumTolerance) -MaximumTolerance ([double]$config.layout.maximumTolerance)
             $state.Layout = Get-SmartPbiLayout -Analysis $state.Analysis -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $validation = Test-PbiLayout -Layout $state.Layout
-            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
-            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' topology columns, '+$state.Analysis.RowCount+' topology rows; drift tolerance X='+$state.Analysis.ColumnTolerance+', Y='+$state.Analysis.RowTolerance+'; '+$state.Layout.ChangedCount+' visuals would change; '+$state.Analysis.LockedVisualCount+' protected visual(s).')
+            $strategyLabel = if ($state.Layout.PSObject.Properties.Name -contains 'LayoutStrategy') { [string]$state.Layout.LayoutStrategy } else { 'Smart Align' }
+            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$strategyLabel+' | '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
+            $areaText = ''
+            if ($state.Layout.PSObject.Properties.Name -contains 'MaxAreaShareDeltaPercent' -and $null -ne $state.Layout.MaxAreaShareDeltaPercent) {
+                $areaText = '; max occupied-area share drift='+$state.Layout.MaxAreaShareDeltaPercent+'%'
+            }
+            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' topology columns, '+$state.Analysis.RowCount+' topology rows; strategy='+$strategyLabel+$areaText+'; '+$state.Layout.ChangedCount+' visuals would change; '+$state.Analysis.LockedVisualCount+' protected visual(s).')
             if ($validation.IsValid) { Add-Activity 'Proposed layout validation passed.'; $btnApply.Enabled=($state.Layout.ChangedCount -gt 0) }
             else { foreach ($err in $validation.Errors) { Add-Activity ('Validation: '+$err) }; $btnApply.Enabled=$false }
         } catch { $btnApply.Enabled=$false; Show-Error $_.Exception.Message }
