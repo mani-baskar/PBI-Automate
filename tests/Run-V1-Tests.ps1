@@ -197,6 +197,14 @@ try {
     $validation = Test-PbiLayout -Layout $layout
     Assert-True $validation.IsValid 'Layout becomes valid again after source file is restored'
 
+    $failureBackup = New-PbiBackup -ProjectRoot $project.ProjectRoot -Items $layout.Items -PageName $pages[0].DisplayName
+    $failureOriginal = [System.IO.File]::ReadAllText($a)
+    [System.IO.File]::WriteAllText($a,($failureOriginal + [Environment]::NewLine),(New-Object System.Text.UTF8Encoding($false)))
+    Assert-Throws { Set-PbiLayoutFiles -Layout $layout -BackupOperation $failureBackup | Out-Null } 'Writer rejects a source file changed after backup'
+    Assert-True ((Get-FileHash -LiteralPath $a -Algorithm SHA256).Hash -eq $originalHash[$a]) 'Failed write is automatically rolled back to backup bytes'
+    $failedManifest = Get-Content -LiteralPath $failureBackup.ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ([string]$failedManifest.Status -eq 'RolledBack') 'Failed write manifest is marked RolledBack'
+
     $backup = New-PbiBackup -ProjectRoot $project.ProjectRoot -Items $layout.Items -PageName $pages[0].DisplayName
     Assert-True (Test-Path -LiteralPath $backup.ManifestPath -PathType Leaf) 'Backup manifest is created before write'
     Assert-True (@($backup.Manifest.Entries).Count -eq 3) 'All changed visual files are backed up'
