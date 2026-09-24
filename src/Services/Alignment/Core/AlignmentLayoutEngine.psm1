@@ -754,6 +754,15 @@ function Get-WeightedTrackPbiLayout {
     }
 }
 
+function Test-LayoutCandidateGeometry {
+    param([Parameter(Mandatory=$true)]$Layout)
+
+    $validator = Get-Command -Name Test-PbiLayout -ErrorAction SilentlyContinue
+    if ($null -eq $validator) { return $true }
+
+    $result = Test-PbiLayout -Layout $Layout
+    return [bool]$result.IsValid
+}
 function Get-SmartPbiLayout {
     [CmdletBinding()]
     param(
@@ -784,10 +793,10 @@ function Get-SmartPbiLayout {
     # vertical tracks. This matches the report-authoring pattern used by the
     # alignment service and preserves those original proportions.
     $frameLayout = Get-FrameAnchoredPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
-    if ($null -ne $frameLayout) { return $frameLayout }
+    if ($null -ne $frameLayout -and (Test-LayoutCandidateGeometry -Layout $frameLayout)) { return $frameLayout }
 
     $areaLayout = Get-AreaPreservingPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
-    if ($null -ne $areaLayout) { return $areaLayout }
+    if ($null -ne $areaLayout -and (Test-LayoutCandidateGeometry -Layout $areaLayout)) { return $areaLayout }
 
     return Get-WeightedTrackPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
 }
