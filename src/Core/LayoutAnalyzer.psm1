@@ -26,7 +26,7 @@ function Get-ClusterStarts {
     return @($clusters | Sort-Object Center)
 }
 
-function Test-CanvasBackgroundLike {
+function Test-ProtectedLayoutVisual {
     param(
         [Parameter(Mandatory=$true)]$Visual,
         [Parameter(Mandatory=$true)][double]$PageWidth,
@@ -38,7 +38,32 @@ function Test-CanvasBackgroundLike {
     $widthRatio = [double]$Visual.Width / $PageWidth
     $heightRatio = [double]$Visual.Height / $PageHeight
 
-    return ($widthRatio -ge 0.90 -and $heightRatio -ge 0.90)
+    if ($widthRatio -ge 0.90 -and $heightRatio -ge 0.90) {
+        return $true
+    }
+
+    $type = ([string]$Visual.VisualType).ToLowerInvariant()
+    $structuralTypes = @(
+        'textbox',
+        'shape',
+        'basicshape',
+        'image',
+        'button',
+        'actionbutton',
+        'navigationbutton',
+        'pagenavigator',
+        'bookmarknavigator',
+        'visualgroup'
+    )
+
+    if ($structuralTypes -notcontains $type) {
+        return $false
+    }
+
+    $isWideChrome = ($widthRatio -ge 0.75 -and $heightRatio -le 0.18)
+    $isTallChrome = ($heightRatio -ge 0.75 -and $widthRatio -le 0.18)
+
+    return ($isWideChrome -or $isTallChrome)
 }
 
 function Get-PbiLayoutAnalysis {
@@ -56,7 +81,7 @@ function Get-PbiLayoutAnalysis {
     $visuals=@()
 
     foreach ($visual in $allVisuals) {
-        if (Test-CanvasBackgroundLike -Visual $visual -PageWidth ([double]$PageSnapshot.Width) -PageHeight ([double]$PageSnapshot.Height)) {
+        if (Test-ProtectedLayoutVisual -Visual $visual -PageWidth ([double]$PageSnapshot.Width) -PageHeight ([double]$PageSnapshot.Height)) {
             $locked += $visual
         } else {
             $visuals += $visual
@@ -64,7 +89,7 @@ function Get-PbiLayoutAnalysis {
     }
 
     if ($visuals.Count -eq 0) {
-        throw 'No layout-managed visuals remain after protecting canvas-sized background/decorative objects.'
+        throw 'No layout-managed visuals remain after protecting canvas-sized or structural background/decorative objects.'
     }
 
     $medianWidth=Get-MedianValue -Values ([double[]]@($visuals | ForEach-Object { $_.Width }))
