@@ -12,7 +12,7 @@ function Show-PBIAutomateMainForm {
     $state = [pscustomobject]@{ Project=$null; Pages=@(); Page=$null; Snapshot=$null; Analysis=$null; Layout=$null; LastBackup=$null }
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = ('PBI Automate — V1 Smart Layout — ' + [string]$config.version)
+    $form.Text = ('PBI Automate - V1 Smart Layout - ' + [string]$config.version)
     $form.StartPosition = 'CenterScreen'
     $form.MinimumSize = New-Object System.Drawing.Size(1080,720)
     $form.Size = New-Object System.Drawing.Size(1280,820)
@@ -102,8 +102,8 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Page = $cmbPage.SelectedItem
             $state.Snapshot = Get-PbiPageSnapshot -Page $state.Page
             $state.Analysis=$null; $state.Layout=$null; $btnApply.Enabled=$false
-            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Before — '+$state.Page.DisplayName)
-            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After — Analyze to preview'
+            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Before - '+$state.Page.DisplayName)
+            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After - Analyze to preview'
             Add-Activity ('Page ready: '+$state.Page.DisplayName+' | '+$state.Snapshot.Visuals.Count+' visuals')
         } catch { Show-Error $_.Exception.Message }
     }
@@ -115,7 +115,7 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Analysis = Get-PbiLayoutAnalysis -PageSnapshot $state.Snapshot -MinimumTolerance ([double]$config.layout.minimumTolerance) -MaximumTolerance ([double]$config.layout.maximumTolerance)
             $state.Layout = Get-SmartPbiLayout -Analysis $state.Analysis -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $validation = Test-PbiLayout -Layout $state.Layout
-            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After — '+$state.Layout.Columns+' cols × '+$state.Layout.Rows+' rows')
+            Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
             Add-Activity ('Detected '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; '+$state.Layout.ChangedCount+' visuals would change.')
             if ($validation.IsValid) { Add-Activity 'Proposed layout validation passed.'; $btnApply.Enabled=($state.Layout.ChangedCount -gt 0) }
             else { foreach ($err in $validation.Errors) { Add-Activity ('Validation: '+$err) }; $btnApply.Enabled=$false }
@@ -127,7 +127,7 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Layout = $null
             $btnApply.Enabled = $false
             if ($null -ne $state.Snapshot) {
-                Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After — settings changed; preview again'
+                Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After - settings changed; preview again'
                 Add-Activity 'Layout settings changed. Preview again before Apply.'
             }
         }
@@ -176,7 +176,7 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $post = [pscustomobject]@{ PageWidth=$state.Snapshot.Width; PageHeight=$state.Snapshot.Height; Items=$state.Snapshot.Visuals }
             $postValidation = Test-PbiLayout -Layout $post
             if (-not $postValidation.IsValid) { throw ('Post-write validation failed: '+($postValidation.Errors -join ' | ')) }
-            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Current — '+$state.Page.DisplayName)
+            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Current - '+$state.Page.DisplayName)
             Write-PBIAutomateLog -Message ('Applied layout to '+$state.Page.DisplayName+'; files='+$write.ChangedCount+'; backup='+$state.LastBackup.Directory) | Out-Null
             $state.Analysis=$null; $state.Layout=$null
             $btnApply.Enabled=$false
