@@ -201,6 +201,11 @@ try {
     Assert-True $realValidation.IsValid 'Real PBIP Smart Align proposal has no unintended overlaps'
     Assert-True ($realLayout.Columns -eq 6 -and $realLayout.Rows -eq 3) 'Real PBIP preview uses 6 x 3 topology instead of 8 x 6'
     Assert-True ($realLayout.LayoutStrategy -eq 'Area Preserve') 'Real PBIP uses area-preserving anchored layout strategy'
+    $realTopLeft = @($realLayout.Items | Where-Object { -not $_.IsLocked -and $_.Row -eq 0 } | Sort-Object X)[0]
+    $realLeftStack = @($realLayout.Items | Where-Object { -not $_.IsLocked -and $_.Column -eq 0 -and $_.Row -gt 0 } | Sort-Object Y)[0]
+    Assert-True ([Math]::Abs([double]$realTopLeft.X - [double]$realLeftStack.X) -le 0.01) 'Primary top and left anchors share the same X edge'
+    Assert-True ([Math]::Abs([double]$realTopLeft.Width - [double]$realLeftStack.Width) -le 0.01) 'Near-aligned left stack inherits top-left width instead of drifting'
+    Assert-True $realLayout.AnchorSnapUsed 'Real PBIP reports top-to-left anchor snapping was used'
     Assert-True ($realLayout.MaxAreaShareDeltaPercent -le 1.0) 'Real PBIP preserves each visual share of occupied area within 1 percentage point'
 
     $realTop = @($realLayout.Items | Where-Object { -not $_.IsLocked -and $_.Row -eq 0 } | Sort-Object X)
