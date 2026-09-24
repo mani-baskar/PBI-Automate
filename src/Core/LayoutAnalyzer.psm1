@@ -35,6 +35,12 @@ function Test-ProtectedLayoutVisual {
 
     if ($PageWidth -le 0 -or $PageHeight -le 0) { return $false }
 
+    if (($Visual.PSObject.Properties.Name -contains 'IsHidden' -and [bool]$Visual.IsHidden) -or
+        ($Visual.PSObject.Properties.Name -contains 'IsVisualGroup' -and [bool]$Visual.IsVisualGroup) -or
+        ($Visual.PSObject.Properties.Name -contains 'ParentGroupName' -and -not [string]::IsNullOrWhiteSpace([string]$Visual.ParentGroupName))) {
+        return $true
+    }
+
     $widthRatio = [double]$Visual.Width / $PageWidth
     $heightRatio = [double]$Visual.Height / $PageHeight
 
@@ -128,6 +134,9 @@ function Get-PbiLayoutAnalysis {
             VisualType=$v.VisualType
             FilePath=$v.FilePath
             SourceHash=$v.FileHash
+            ParentGroupName=$v.ParentGroupName
+            IsVisualGroup=$v.IsVisualGroup
+            IsHidden=$v.IsHidden
             X=$v.X
             Y=$v.Y
             Width=$v.Width
@@ -148,6 +157,9 @@ function Get-PbiLayoutAnalysis {
             VisualType=$v.VisualType
             FilePath=$v.FilePath
             SourceHash=$v.FileHash
+            ParentGroupName=$v.ParentGroupName
+            IsVisualGroup=$v.IsVisualGroup
+            IsHidden=$v.IsHidden
             X=$v.X
             Y=$v.Y
             Width=$v.Width
