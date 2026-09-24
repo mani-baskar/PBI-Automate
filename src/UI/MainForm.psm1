@@ -165,7 +165,7 @@ function Show-PBIAutomateMainForm {
     $workspaceShell.RowCount = 1
     $workspaceShell.Margin = New-Object System.Windows.Forms.Padding(0)
     $workspaceShell.Padding = New-Object System.Windows.Forms.Padding(0)
-    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,245)))
+    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,160)))
     [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
     [void]$workspaceShell.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
     $rootGrid.Controls.Add($workspaceShell,0,1)
