@@ -455,9 +455,16 @@ function Show-PBIAutomateMainForm {
             $state.Analysis = $null
             $state.Layout = $null
             $btnApply.Enabled = $false
-            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $state.Snapshot.Visuals -Title ('Before - '+$state.Page.DisplayName)
+
+            $activeVisuals = @(Get-PbiActivePageVisuals -PageSnapshot $state.Snapshot)
+            $hiddenCount = @($state.Snapshot.Visuals | Where-Object {
+                if ($_.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$_.EffectiveHidden } else { [bool]$_.IsHidden }
+            }).Count
+            $groupCount = @($state.Snapshot.Visuals | Where-Object { [bool]$_.IsVisualGroup }).Count
+
+            Set-LayoutPreviewData -Panel $beforePanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items $activeVisuals -Title ('Before - '+$state.Page.DisplayName)
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Snapshot.Width -PageHeight $state.Snapshot.Height -Items @() -Title 'After - Analyze to preview'
-            Add-Activity ('Page ready: '+$state.Page.DisplayName+' | '+$state.Snapshot.Visuals.Count+' visuals')
+            Add-Activity ('Page ready: '+$state.Page.DisplayName+' | total='+$state.Snapshot.Visuals.Count+'; active='+$activeVisuals.Count+'; hidden='+$hiddenCount+'; group containers='+$groupCount)
         }
         catch { Show-Error $_.Exception.Message }
     }
@@ -506,7 +513,7 @@ function Show-PBIAutomateMainForm {
             if ($state.Layout.PSObject.Properties.Name -contains 'MaxAreaShareDeltaPercent' -and $null -ne $state.Layout.MaxAreaShareDeltaPercent) {
                 $areaText = '; max occupied-area share drift='+$state.Layout.MaxAreaShareDeltaPercent+'%'
             }
-            Add-Activity ('Alignment: '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; strategy='+$strategyLabel+$areaText+'; '+$state.Layout.ChangedCount+' visual(s) would change.')
+            Add-Activity ('Alignment: active='+$state.Analysis.ActiveVisualCount+'; hidden ignored='+$state.Analysis.HiddenVisualCount+'; group containers ignored='+$state.Analysis.GroupContainerCount+'; visible grouped children='+$state.Analysis.ActiveGroupedVisualCount+'; '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; strategy='+$strategyLabel+$areaText+'; '+$state.Layout.ChangedCount+' visual(s) would change.')
 
             if ($result.Validation.IsValid) {
                 Add-Activity 'Proposed alignment validation passed.'
