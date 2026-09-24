@@ -137,12 +137,22 @@ try {
 
     $background = New-TestVisual -PageFolder $pageFolder -Id 'Background.Visual' -X 0 -Y 0 -Width 400 -Height 300 -Type 'shape'
     $header = New-TestVisual -PageFolder $pageFolder -Id 'Header.Visual' -X 0 -Y 0 -Width 400 -Height 40 -Type 'textbox'
+
+    $groupContainer = Join-Path $pageFolder 'visuals\GroupContainer.Visual\visual.json'
+    Write-Utf8NoBom -Path $groupContainer -Content '{"name":"Group1","position":{"x":20,"y":60,"z":0,"height":180,"width":360,"tabOrder":10},"visualGroup":{"displayName":"Grouped Area","groupMode":0}}'
+
+    $groupChild = Join-Path $pageFolder 'visuals\GroupChild.Visual\visual.json'
+    Write-Utf8NoBom -Path $groupChild -Content '{"name":"GroupedChild","position":{"x":30,"y":70,"z":1,"height":80,"width":120,"tabOrder":11},"parentGroupName":"Group1","visual":{"visualType":"slicer"},"filterConfig":{"filters":[]}}'
+
+    $hiddenVisual = Join-Path $pageFolder 'visuals\Hidden.Visual\visual.json'
+    Write-Utf8NoBom -Path $hiddenVisual -Content '{"name":"Hidden1","position":{"x":200,"y":80,"z":2,"height":80,"width":120,"tabOrder":12},"isHidden":true,"visual":{"visualType":"card"},"filterConfig":{"filters":[]}}'
+
     $a = New-TestVisual -PageFolder $pageFolder -Id 'VisualA.Visual' -X 7.25 -Y 8.5 -Width 184.75 -Height 130.25 -Type 'card'
     $b = New-TestVisual -PageFolder $pageFolder -Id 'VisualB.Visual' -X 204.4 -Y 11.2 -Width 188.1 -Height 127.6 -Type 'card'
     $c = New-TestVisual -PageFolder $pageFolder -Id 'VisualC.Visual' -X 9.1 -Y 151.35 -Width 383.2 -Height 140.4 -Type 'barChart'
 
     $originalHash = @{}
-    foreach ($path in @($background,$header,$a,$b,$c)) {
+    foreach ($path in @($background,$header,$groupContainer,$groupChild,$hiddenVisual,$a,$b,$c)) {
         $originalHash[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
     }
 
@@ -178,11 +188,17 @@ try {
     Assert-True ((Get-Item -LiteralPath $directReport.ReportFolder).FullName -ieq $resolvedExpected) 'Direct .Report folder selection resolves correctly'
 
     $snapshot = Get-PbiPageSnapshot -Page $pages[0]
-    Assert-True ($snapshot.Visuals.Count -eq 5) 'Five supported visuals, including canvas background and header, are read'
+    Assert-True ($snapshot.Visuals.Count -eq 8) 'Eight visuals, including protected background/header/group/hidden items, are read'
+    $readGroup = @($snapshot.Visuals | Where-Object { $_.Id -eq 'GroupContainer.Visual' })[0]
+    $readChild = @($snapshot.Visuals | Where-Object { $_.Id -eq 'GroupChild.Visual' })[0]
+    $readHidden = @($snapshot.Visuals | Where-Object { $_.Id -eq 'Hidden.Visual' })[0]
+    Assert-True ($readGroup.IsVisualGroup -and $readGroup.VisualType -eq 'visualGroup') 'visualGroup container is detected'
+    Assert-True ($readChild.ParentGroupName -eq 'Group1') 'parentGroupName is read for grouped child'
+    Assert-True $readHidden.IsHidden 'Root-level isHidden state is read'
     Assert-True ($snapshot.Width -eq 400 -and $snapshot.Height -eq 300) 'Page canvas size is read'
 
     $analysis = Get-PbiLayoutAnalysis -PageSnapshot $snapshot
-    Assert-True ($analysis.LockedVisualCount -eq 2) 'Canvas background and structural textbox header are protected from Smart Align'
+    Assert-True ($analysis.LockedVisualCount -eq 5) 'Background, structural header, visualGroup, grouped child, and hidden visual are protected from Smart Align'
     Assert-True ($analysis.ManagedVisualCount -eq 3) 'Only content visuals participate in row/column detection'
     Assert-True ($analysis.ColumnCount -eq 2) 'Rough X positions collapse into two columns'
     Assert-True ($analysis.RowCount -eq 2) 'Rough Y positions collapse into two rows'
@@ -198,6 +214,9 @@ try {
     $lockedHeader = @($layout.Items | Where-Object { $_.Id -eq 'Header.Visual' })[0]
     Assert-True ($lockedHeader.IsLocked -and -not $lockedHeader.Changed) 'Wide structural textbox header remains unchanged in the proposal'
     Assert-True ($lockedHeader.Width -eq 400 -and $lockedHeader.Height -eq 40) 'Structural header geometry is preserved exactly'
+    Assert-True (@($layout.Items | Where-Object { $_.IsVisualGroup -and $_.IsLocked }).Count -eq 1) 'visualGroup container remains locked in proposal'
+    Assert-True (@($layout.Items | Where-Object { $_.ParentGroupName -eq 'Group1' -and $_.IsLocked }).Count -eq 1) 'Grouped child remains locked in proposal'
+    Assert-True (@($layout.Items | Where-Object { $_.IsHidden -and $_.IsLocked }).Count -eq 1) 'Hidden visual remains locked in proposal'
     Assert-True ($layout.Columns -eq 2 -and $layout.Rows -eq 2) 'Layout keeps the detected two-by-two structure'
 
     $currentWithBackground = [pscustomobject]@{ PageWidth=$snapshot.Width; PageHeight=$snapshot.Height; Items=$snapshot.Visuals }
@@ -228,6 +247,9 @@ try {
     Assert-True (@($backup.Manifest.Entries).Count -eq 3) 'Only changed content visual files are backed up'
     Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $background }).Count -gt 0)) 'Protected background is not included in write backup'
     Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $header }).Count -gt 0)) 'Protected structural header is not included in write backup'
+    Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $groupContainer }).Count -gt 0)) 'visualGroup container is not included in write backup'
+    Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $groupChild }).Count -gt 0)) 'Grouped child is not included in write backup'
+    Assert-True (-not (@($backup.Manifest.Entries | Where-Object { $_.TargetPath -eq $hiddenVisual }).Count -gt 0)) 'Hidden visual is not included in write backup'
 
     $write = Set-PbiLayoutFiles -Layout $layout -BackupOperation $backup
     Assert-True ($write.Success -and $write.ChangedCount -eq 3) 'Geometry writes complete successfully'
