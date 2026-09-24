@@ -51,7 +51,9 @@ function Get-AdaptiveStartTolerance {
         [double[]]$Values,
         [double]$BaseSize,
         [double]$MinimumTolerance,
-        [double]$MaximumTolerance
+        [double]$MaximumTolerance,
+        [double]$BaseRatio = 0.30,
+        [double]$NearbyGapRatio = 0.50
     )
 
     if ($BaseSize -le 0) {
@@ -61,12 +63,12 @@ function Get-AdaptiveStartTolerance {
     # Start with a size-relative tolerance instead of a tiny fixed pixel value.
     # PBIR coordinates are page units; on a 1920-wide canvas a 40-80 unit drift
     # can still visually represent the same intended row/column.
-    $tolerance = [Math]::Max($MinimumTolerance,$BaseSize * 0.22)
-    $sizeCap = [Math]::Max($MinimumTolerance,$BaseSize * 0.45)
+    $tolerance = [Math]::Max($MinimumTolerance,$BaseSize * $BaseRatio)
+    $sizeCap = [Math]::Max($MinimumTolerance,$BaseSize * 0.55)
 
     $sorted = @($Values | Sort-Object)
     if ($sorted.Count -gt 1) {
-        $smallGapLimit = $BaseSize * 0.40
+        $smallGapLimit = $BaseSize * $NearbyGapRatio
 
         for ($i = 1; $i -lt $sorted.Count; $i++) {
             $gap = [Math]::Abs([double]$sorted[$i] - [double]$sorted[$i - 1])
@@ -301,8 +303,8 @@ function Get-PbiLayoutAnalysis {
     $xValues = [double[]]@($visuals | ForEach-Object { [double]$_.X })
     $yValues = [double[]]@($visuals | ForEach-Object { [double]$_.Y })
 
-    $xTolerance = Get-AdaptiveStartTolerance -Values $xValues -BaseSize $medianWidth -MinimumTolerance $MinimumTolerance -MaximumTolerance $MaximumTolerance
-    $yTolerance = Get-AdaptiveStartTolerance -Values $yValues -BaseSize $medianHeight -MinimumTolerance $MinimumTolerance -MaximumTolerance $MaximumTolerance
+    $xTolerance = Get-AdaptiveStartTolerance -Values $xValues -BaseSize $medianWidth -MinimumTolerance $MinimumTolerance -MaximumTolerance $MaximumTolerance -BaseRatio 0.30 -NearbyGapRatio 0.50
+    $yTolerance = Get-AdaptiveStartTolerance -Values $yValues -BaseSize $medianHeight -MinimumTolerance $MinimumTolerance -MaximumTolerance $MaximumTolerance -BaseRatio 0.45 -NearbyGapRatio 0.55
 
     $columnClusters = @(Get-ClusterStarts -Values $xValues -Tolerance $xTolerance)
     $rowClusters = @(Get-ClusterStarts -Values $yValues -Tolerance $yTolerance)
