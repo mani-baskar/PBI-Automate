@@ -200,6 +200,7 @@ try {
     $analysis = Get-PbiLayoutAnalysis -PageSnapshot $snapshot
     Assert-True ($analysis.LockedVisualCount -eq 5) 'Background, structural header, visualGroup, grouped child, and hidden visual are protected from Smart Align'
     Assert-True ($analysis.ManagedVisualCount -eq 3) 'Only content visuals participate in row/column detection'
+    Assert-True ($analysis.ReservedTop -eq 40) 'Top structural header reserves its occupied region'
     Assert-True ($analysis.ColumnCount -eq 2) 'Rough X positions collapse into two columns'
     Assert-True ($analysis.RowCount -eq 2) 'Rough Y positions collapse into two rows'
 
@@ -218,6 +219,8 @@ try {
     Assert-True (@($layout.Items | Where-Object { $_.ParentGroupName -eq 'Group1' -and $_.IsLocked }).Count -eq 1) 'Grouped child remains locked in proposal'
     Assert-True (@($layout.Items | Where-Object { $_.IsHidden -and $_.IsLocked }).Count -eq 1) 'Hidden visual remains locked in proposal'
     Assert-True ($layout.Columns -eq 2 -and $layout.Rows -eq 2) 'Layout keeps the detected two-by-two structure'
+    Assert-True ($layout.ContentTop -eq 45) 'Smart Align starts content after header plus configured 5-unit gap'
+    Assert-True (@($layout.Items | Where-Object { -not $_.IsLocked -and $_.Y -lt 45 }).Count -eq 0) 'No managed visual is placed inside the reserved header region'
 
     $currentWithBackground = [pscustomobject]@{ PageWidth=$snapshot.Width; PageHeight=$snapshot.Height; Items=$snapshot.Visuals }
     $currentValidation = Test-PbiLayout -Layout $currentWithBackground
