@@ -67,7 +67,8 @@ function Get-PbiPageVisuals {
         $x=[double](Get-OptionalPropertyValue -Object $p -Name 'x' -Default 0); $y=[double](Get-OptionalPropertyValue -Object $p -Name 'y' -Default 0)
         $w=[double](Get-OptionalPropertyValue -Object $p -Name 'width' -Default 0); $h=[double](Get-OptionalPropertyValue -Object $p -Name 'height' -Default 0)
         if ($w -le 0 -or $h -le 0) { continue }
-        $result += [pscustomobject]@{ Id=$dir.Name; VisualType=$visualType; FilePath=$visualPath; X=$x; Y=$y; Width=$w; Height=$h; Right=$x+$w; Bottom=$y+$h; CenterX=$x+($w/2.0); CenterY=$y+($h/2.0) }
+        $fileHash = (Get-FileHash -LiteralPath $visualPath -Algorithm SHA256).Hash
+        $result += [pscustomobject]@{ Id=$dir.Name; VisualType=$visualType; FilePath=$visualPath; FileHash=$fileHash; X=$x; Y=$y; Width=$w; Height=$h; Right=$x+$w; Bottom=$y+$h; CenterX=$x+($w/2.0); CenterY=$y+($h/2.0) }
     }
     return @($result | Sort-Object Y, X)
 }
