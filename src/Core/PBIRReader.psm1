@@ -53,52 +53,117 @@ function Get-PbiPages {
 function Get-PbiPageVisuals {
     [CmdletBinding()]
     param([Parameter(Mandatory=$true)][string]$PageFolder)
+
     $visualsDir = Join-Path $PageFolder 'visuals'
     if (-not (Test-Path -LiteralPath $visualsDir -PathType Container)) { return @() }
+
     $result = @()
+
     foreach ($dir in @(Get-ChildItem -LiteralPath $visualsDir -Directory -ErrorAction Stop)) {
         $visualPath = Join-Path $dir.FullName 'visual.json'
         if (-not (Test-Path -LiteralPath $visualPath -PathType Leaf)) { continue }
+
         $visual = Read-JsonFile -Path $visualPath
         if (-not ($visual.PSObject.Properties.Name -contains 'position')) { continue }
+
         $p = $visual.position
         $visualType = $null
         $isVisualGroup = $false
+        $groupMode = ''
 
         if ($visual.PSObject.Properties.Name -contains 'visualGroup' -and $null -ne $visual.visualGroup) {
             $visualType = 'visualGroup'
             $isVisualGroup = $true
+            if ($visual.visualGroup.PSObject.Properties.Name -contains 'groupMode') {
+                $groupMode = [string]$visual.visualGroup.groupMode
+            }
         }
-        elseif ($visual.PSObject.Properties.Name -contains 'visual' -and $null -ne $visual.visual -and $visual.visual.PSObject.Properties.Name -contains 'visualType') {
-            $visualType=[string]$visual.visual.visualType
+        elseif ($visual.PSObject.Properties.Name -contains 'visual' -and
+                $null -ne $visual.visual -and
+                $visual.visual.PSObject.Properties.Name -contains 'visualType') {
+            $visualType = [string]$visual.visual.visualType
         }
 
+        $objectName = [string](Get-OptionalPropertyValue -Object $visual -Name 'name' -Default $dir.Name)
         $parentGroupName = [string](Get-OptionalPropertyValue -Object $visual -Name 'parentGroupName' -Default '')
         $isHidden = [bool](Get-OptionalPropertyValue -Object $visual -Name 'isHidden' -Default $false)
 
-        $x=[double](Get-OptionalPropertyValue -Object $p -Name 'x' -Default 0); $y=[double](Get-OptionalPropertyValue -Object $p -Name 'y' -Default 0)
-        $w=[double](Get-OptionalPropertyValue -Object $p -Name 'width' -Default 0); $h=[double](Get-OptionalPropertyValue -Object $p -Name 'height' -Default 0)
+        $x = [double](Get-OptionalPropertyValue -Object $p -Name 'x' -Default 0)
+        $y = [double](Get-OptionalPropertyValue -Object $p -Name 'y' -Default 0)
+        $w = [double](Get-OptionalPropertyValue -Object $p -Name 'width' -Default 0)
+        $h = [double](Get-OptionalPropertyValue -Object $p -Name 'height' -Default 0)
+
         if ($w -le 0 -or $h -le 0) { continue }
+
         $fileHash = (Get-FileHash -LiteralPath $visualPath -Algorithm SHA256).Hash
+
         $result += [pscustomobject]@{
-            Id=$dir.Name
-            VisualType=$visualType
-            FilePath=$visualPath
-            FileHash=$fileHash
-            ParentGroupName=$parentGroupName
-            IsVisualGroup=$isVisualGroup
-            IsHidden=$isHidden
-            X=$x
-            Y=$y
-            Width=$w
-            Height=$h
-            Right=$x+$w
-            Bottom=$y+$h
-            CenterX=$x+($w/2.0)
-            CenterY=$y+($h/2.0)
+            Id = $dir.Name
+            ObjectName = $objectName
+            VisualType = $visualType
+            FilePath = $visualPath
+            FileHash = $fileHash
+            ParentGroupName = $parentGroupName
+            IsVisualGroup = $isVisualGroup
+            GroupMode = $groupMode
+            IsHidden = $isHidden
+            EffectiveHidden = $isHidden
+            HiddenReason = $(if ($isHidden) { 'Self' } else { '' })
+            X = $x
+            Y = $y
+            Width = $w
+            Height = $h
+            Right = $x + $w
+            Bottom = $y + $h
+            CenterX = $x + ($w / 2.0)
+            CenterY = $y + ($h / 2.0)
         }
     }
+
+    # Power BI hides every child when an ancestor visualGroup is hidden.
+    # parentGroupName references the group's root-level "name", not its folder id.
+    $byObjectName = @{}
+    foreach ($item in $result) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$item.ObjectName)) {
+            $byObjectName[[string]$item.ObjectName] = $item
+        }
+    }
+
+    foreach ($item in $result) {
+        if ([bool]$item.IsHidden) { continue }
+
+        $parentName = [string]$item.ParentGroupName
+        $visited = @{}
+
+        while (-not [string]::IsNullOrWhiteSpace($parentName) -and $byObjectName.ContainsKey($parentName)) {
+            if ($visited.ContainsKey($parentName)) { break }
+            $visited[$parentName] = $true
+
+            $parent = $byObjectName[$parentName]
+            if ([bool]$parent.IsHidden) {
+                $item.EffectiveHidden = $true
+                $item.HiddenReason = ('AncestorGroup:' + [string]$parent.ObjectName)
+                break
+            }
+
+            $parentName = [string]$parent.ParentGroupName
+        }
+    }
+
     return @($result | Sort-Object Y, X)
+}
+
+function Get-PbiActivePageVisuals {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)]$PageSnapshot)
+
+    return @(
+        $PageSnapshot.Visuals |
+        Where-Object {
+            $effectiveHidden = if ($_.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$_.EffectiveHidden } else { [bool]$_.IsHidden }
+            (-not $effectiveHidden) -and (-not [bool]$_.IsVisualGroup)
+        }
+    )
 }
 
 function Get-PbiPageSnapshot {
@@ -110,4 +175,4 @@ function Get-PbiPageSnapshot {
     [pscustomobject]@{ Id=$Page.Id; Name=$Page.Name; DisplayName=$Page.DisplayName; Width=$width; Height=$height; PageFolder=$Page.PageFolder; Visuals=$visuals }
 }
 
-Export-ModuleMember -Function Get-PbiPages, Get-PbiPageVisuals, Get-PbiPageSnapshot
+Export-ModuleMember -Function Get-PbiPages, Get-PbiPageVisuals, Get-PbiPageSnapshot, Get-PbiActivePageVisuals
