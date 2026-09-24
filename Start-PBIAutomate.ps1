@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $modules = @(
+    'src\Core\ConfigService.psm1',
     'src\Core\Logging.psm1',
     'src\Core\ProjectDiscovery.psm1',
     'src\Core\PBIRReader.psm1',
