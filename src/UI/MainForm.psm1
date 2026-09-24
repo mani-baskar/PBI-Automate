@@ -119,7 +119,7 @@ $headerGrid.Controls.Add((New-Label 'Layout Mode'),0,3); $headerGrid.Controls.Ad
             $state.Layout = Get-SmartPbiLayout -Analysis $state.Analysis -Margin ([double]$numMargin.Value) -Gap ([double]$numGap.Value)
             $validation = Test-PbiLayout -Layout $state.Layout
             Set-LayoutPreviewData -Panel $afterPanel -PageWidth $state.Layout.PageWidth -PageHeight $state.Layout.PageHeight -Items $state.Layout.Items -Title ('After - '+$state.Layout.Columns+' cols x '+$state.Layout.Rows+' rows')
-            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; '+$state.Layout.ChangedCount+' visuals would change.')
+            Add-Activity ('Detected '+$state.Analysis.ColumnCount+' columns, '+$state.Analysis.RowCount+' rows; '+$state.Layout.ChangedCount+' visuals would change; '+$state.Analysis.LockedVisualCount+' canvas-sized background/decorative visual(s) protected.')
             if ($validation.IsValid) { Add-Activity 'Proposed layout validation passed.'; $btnApply.Enabled=($state.Layout.ChangedCount -gt 0) }
             else { foreach ($err in $validation.Errors) { Add-Activity ('Validation: '+$err) }; $btnApply.Enabled=$false }
         } catch { $btnApply.Enabled=$false; Show-Error $_.Exception.Message }
