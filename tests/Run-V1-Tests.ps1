@@ -224,6 +224,33 @@ try {
         Assert-True ([Math]::Abs($actualGap - 10) -le 0.01) ('Inner visual gap ' + $i + ' is exactly 10 units')
     }
 
+    # Synthetic anchor-priority case: top is the primary width anchor and
+    # left is the primary height anchor when original dimensions differ only slightly.
+    $anchorItems = @(
+        [pscustomobject]@{ Id='ATop1'; VisualType='card'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=0.0; Y=0.0; Width=200.0; Height=60.0; Column=0; Row=0; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='ATop2'; VisualType='card'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=205.0; Y=0.0; Width=395.0; Height=60.0; Column=1; Row=0; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='ALeft1'; VisualType='tableEx'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=0.0; Y=65.0; Width=202.0; Height=150.0; Column=0; Row=1; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='ALeft2'; VisualType='tableEx'; FilePath=$a; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=0.0; Y=220.0; Width=202.0; Height=180.0; Column=0; Row=2; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='AMain11'; VisualType='chart'; FilePath=$b; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=207.0; Y=66.0; Width=190.0; Height=148.0; Column=1; Row=1; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='AMain12'; VisualType='chart'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=402.0; Y=66.0; Width=198.0; Height=149.0; Column=2; Row=1; ColumnSpan=1; RowSpan=1; IsLocked=$false; AllowOverlap=$false },
+        [pscustomobject]@{ Id='AMain2'; VisualType='chart'; FilePath=$c; SourceHash=''; ParentGroupName=''; IsVisualGroup=$false; IsHidden=$false; ProtectionReason=$null; X=207.0; Y=221.0; Width=393.0; Height=178.0; Column=1; Row=2; ColumnSpan=2; RowSpan=1; IsLocked=$false; AllowOverlap=$false }
+    )
+    $anchorAnalysis = [pscustomobject]@{
+        PageWidth=600.0; PageHeight=400.0; ColumnCount=3; RowCount=3;
+        ReservedLeft=0.0; ReservedTop=0.0; ReservedRight=600.0; ReservedBottom=400.0;
+        Items=$anchorItems
+    }
+    $anchorLayout = Get-SmartPbiLayout -Analysis $anchorAnalysis -Margin 5 -Gap 5
+    $anchorTopLeft = @($anchorLayout.Items | Where-Object { $_.Id -eq 'ATop1' })[0]
+    $anchorLeft1 = @($anchorLayout.Items | Where-Object { $_.Id -eq 'ALeft1' })[0]
+    $anchorLeft2 = @($anchorLayout.Items | Where-Object { $_.Id -eq 'ALeft2' })[0]
+    $anchorMain11 = @($anchorLayout.Items | Where-Object { $_.Id -eq 'AMain11' })[0]
+    $anchorMain2 = @($anchorLayout.Items | Where-Object { $_.Id -eq 'AMain2' })[0]
+    Assert-True ([Math]::Abs($anchorTopLeft.Width - $anchorLeft1.Width) -le 0.01) 'Primary-top width anchors a near-equal left stack width'
+    Assert-True ([Math]::Abs($anchorLeft1.Height - $anchorMain11.Height) -le 0.01) 'Primary-left row height anchors a near-equal first inner row'
+    Assert-True ([Math]::Abs($anchorLeft2.Height - $anchorMain2.Height) -le 0.01) 'Primary-left row height anchors a near-equal second inner row'
+    Assert-True ($anchorLayout.VerticalAnchorSnapCount -eq 2) 'Two vertical row-height anchor snaps are reported'
+
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
     $resolvedExpected = (Get-Item -LiteralPath $reportFolder).FullName
