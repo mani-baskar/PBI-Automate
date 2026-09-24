@@ -74,6 +74,44 @@ function Test-GeometryInJsonFile {
     return ([Math]::Abs(([double]$p.x)-$Item.X) -le 0.001) -and ([Math]::Abs(([double]$p.y)-$Item.Y) -le 0.001) -and ([Math]::Abs(([double]$p.width)-$Item.Width) -le 0.001) -and ([Math]::Abs(([double]$p.height)-$Item.Height) -le 0.001)
 }
 
+function Test-PbiWriteTargets {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][object[]]$Items)
+
+    foreach ($item in @($Items)) {
+        $target = [string]$item.FilePath
+
+        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
+            throw ('visual.json missing before write: {0}' -f $target)
+        }
+
+        $file = Get-Item -LiteralPath $target -Force
+        if ($file.IsReadOnly) {
+            throw ('visual.json is read-only and cannot be safely updated: {0}' -f $target)
+        }
+
+        $stream = $null
+        try {
+            $stream = [System.IO.File]::Open(
+                $target,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::ReadWrite,
+                [System.IO.FileShare]::None
+            )
+        }
+        catch {
+            throw ('visual.json is locked or not writable. Close applications using it and retry: {0}. {1}' -f $target,$_.Exception.Message)
+        }
+        finally {
+            if ($null -ne $stream) {
+                $stream.Dispose()
+            }
+        }
+    }
+
+    return $true
+}
+
 function Set-PbiLayoutFiles {
     [CmdletBinding()]
     param(
@@ -83,6 +121,9 @@ function Set-PbiLayoutFiles {
 
     $changed = @($Layout.Items | Where-Object { $_.Changed })
     if ($changed.Count -eq 0) { return [pscustomobject]@{ Success=$true; ChangedCount=0; Files=@() } }
+
+    Test-PbiWriteTargets -Items $changed | Out-Null
+
     $written = New-Object System.Collections.Generic.List[string]
 
     try {
@@ -131,4 +172,4 @@ function Set-PbiLayoutFiles {
     }
 }
 
-Export-ModuleMember -Function Set-PbiLayoutFiles
+Export-ModuleMember -Function Set-PbiLayoutFiles, Test-PbiWriteTargets
