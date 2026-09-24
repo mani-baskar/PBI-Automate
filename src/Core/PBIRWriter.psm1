@@ -36,6 +36,17 @@ function Complete-PbiBackupManifest {
     [System.IO.File]::WriteAllText($ManifestPath,$json,(New-Object System.Text.UTF8Encoding($false)))
 }
 
+function Mark-PbiBackupRolledBack {
+    param([Parameter(Mandatory=$true)][string]$ManifestPath)
+
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return }
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $manifest.Status = 'RolledBack'
+    $manifest | Add-Member -MemberType NoteProperty -Name RolledBackAt -Value ((Get-Date).ToString('o')) -Force
+    $json = $manifest | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($ManifestPath,$json,(New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Format-InvariantNumber {
     param([double]$Value)
     return $Value.ToString('0.###',[System.Globalization.CultureInfo]::InvariantCulture)
@@ -114,6 +125,7 @@ function Set-PbiLayoutFiles {
             foreach ($entry in @($manifest.Entries)) {
                 if (Test-Path -LiteralPath $entry.BackupPath -PathType Leaf) { Copy-Item -LiteralPath $entry.BackupPath -Destination $entry.TargetPath -Force }
             }
+            Mark-PbiBackupRolledBack -ManifestPath $manifestPath
         }
         throw
     }
