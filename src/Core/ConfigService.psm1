@@ -34,8 +34,12 @@ function Get-PBIAutomateConfig {
         throw ('Unable to read configuration "{0}": {1}' -f $path,$_.Exception.Message)
     }
 
-    if ($null -eq $loaded.layout) { $loaded | Add-Member -MemberType NoteProperty -Name layout -Value $defaults.layout }
-    if ($null -eq $loaded.safety) { $loaded | Add-Member -MemberType NoteProperty -Name safety -Value $defaults.safety }
+    if (-not ($loaded.PSObject.Properties.Name -contains 'layout') -or $null -eq $loaded.layout) {
+        $loaded | Add-Member -MemberType NoteProperty -Name layout -Value $defaults.layout -Force
+    }
+    if (-not ($loaded.PSObject.Properties.Name -contains 'safety') -or $null -eq $loaded.safety) {
+        $loaded | Add-Member -MemberType NoteProperty -Name safety -Value $defaults.safety -Force
+    }
 
     foreach ($name in @('mode','margin','gap','toleranceMode','minimumTolerance','maximumTolerance')) {
         if (-not ($loaded.layout.PSObject.Properties.Name -contains $name)) {
