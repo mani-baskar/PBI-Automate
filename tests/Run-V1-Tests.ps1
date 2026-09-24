@@ -172,6 +172,35 @@ try {
     Assert-True ($mainForm.Text -like 'PBI Automate*') 'Main window title is configured'
     $mainForm.Dispose()
 
+    # Regression test for the checked-in PBIP page that originally produced
+    # an invalid 8-column x 6-row preview in the desktop UI.
+    $realPbip = Join-Path $repoRoot 'tests\PBIP\Test Report.pbip'
+    Assert-True (Test-Path -LiteralPath $realPbip -PathType Leaf) 'Checked-in real PBIP regression fixture exists'
+
+    $realProject = Resolve-PbiProject -Path $realPbip
+    $realPages = @(Get-PbiPages -ReportFolder $realProject.ReportFolder)
+    $realPage = @($realPages | Where-Object { $_.DisplayName -eq 'Page 1' })[0]
+    Assert-True ($null -ne $realPage) 'Real PBIP regression page is discovered by display name'
+
+    $realSnapshot = Get-PbiPageSnapshot -Page $realPage
+    Assert-True ($realSnapshot.Visuals.Count -eq 11) 'Real PBIP regression page reads all 11 visuals'
+
+    $realAnalysis = Get-PbiLayoutAnalysis -PageSnapshot $realSnapshot -MinimumTolerance ([double]$config.layout.minimumTolerance) -MaximumTolerance ([double]$config.layout.maximumTolerance)
+    Assert-True ($realAnalysis.ColumnCount -eq 6) 'Real PBIP page collapses visual drift into six intended topology columns'
+    Assert-True ($realAnalysis.RowCount -eq 3) 'Real PBIP page collapses visual drift into three intended topology rows'
+
+    $realTall = @($realAnalysis.Items | Where-Object { $_.Id -eq '0d413bfeb72066014b2b' })[0]
+    $realWideMiddle = @($realAnalysis.Items | Where-Object { $_.Id -eq '850238c6e7702195a589' })[0]
+    $realBottom = @($realAnalysis.Items | Where-Object { $_.Id -eq '14dac8f1296c04eab0c7' })[0]
+    Assert-True ($realTall.RowSpan -eq 2) 'Tall left visual preserves its two-row span'
+    Assert-True ($realWideMiddle.ColumnSpan -eq 2) 'Wide middle visual preserves its two-column span'
+    Assert-True ($realBottom.ColumnSpan -eq 5) 'Bottom visual preserves its five-column span'
+
+    $realLayout = Get-SmartPbiLayout -Analysis $realAnalysis -Margin 5 -Gap 5
+    $realValidation = Test-PbiLayout -Layout $realLayout
+    Assert-True $realValidation.IsValid 'Real PBIP Smart Align proposal has no unintended overlaps'
+    Assert-True ($realLayout.Columns -eq 6 -and $realLayout.Rows -eq 3) 'Real PBIP preview uses 6 x 3 topology instead of 8 x 6'
+
     $project = Resolve-PbiProject -Path (Join-Path $projectRoot 'Demo.pbip')
     $resolvedActual = (Get-Item -LiteralPath $project.ReportFolder).FullName
     $resolvedExpected = (Get-Item -LiteralPath $reportFolder).FullName
