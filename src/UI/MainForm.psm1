@@ -153,19 +153,30 @@ function Show-PBIAutomateMainForm {
     # ----------------------------------------------------------------------
     # MAIN SOFTWARE SHELL: SERVICE NAVIGATION + SERVICE WORKSPACE
     # ----------------------------------------------------------------------
-    $workspaceSplit = New-Object System.Windows.Forms.SplitContainer
-    $workspaceSplit.Name = 'WorkspaceSplit'
-    $workspaceSplit.Dock = 'Fill'
-    $workspaceSplit.Orientation = 'Vertical'
-    $workspaceSplit.SplitterDistance = 275
-    $workspaceSplit.FixedPanel = 'Panel1'
-    $workspaceSplit.Panel1MinSize = 250
-    $workspaceSplit.IsSplitterFixed = $true
-    $rootGrid.Controls.Add($workspaceSplit,0,1)
+    # Do not use SplitContainer for the permanent service sidebar.
+    # SplitterDistance/Panel1MinSize are known to behave inconsistently under
+    # WinForms DPI scaling. A TableLayoutPanel with an Absolute first column
+    # gives the sidebar a deterministic width and lets the workspace consume
+    # all remaining space.
+    $workspaceShell = New-Object System.Windows.Forms.TableLayoutPanel
+    $workspaceShell.Name = 'WorkspaceShell'
+    $workspaceShell.Dock = 'Fill'
+    $workspaceShell.ColumnCount = 2
+    $workspaceShell.RowCount = 1
+    $workspaceShell.Margin = New-Object System.Windows.Forms.Padding(0)
+    $workspaceShell.Padding = New-Object System.Windows.Forms.Padding(0)
+    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute,280)))
+    [void]$workspaceShell.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent,100)))
+    [void]$workspaceShell.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent,100)))
+    $rootGrid.Controls.Add($workspaceShell,0,1)
 
-    $navPanel = $workspaceSplit.Panel1
+    $navPanel = New-Object System.Windows.Forms.Panel
+    $navPanel.Name = 'ServiceSidebar'
+    $navPanel.Dock = 'Fill'
+    $navPanel.Margin = New-Object System.Windows.Forms.Padding(0)
     $navPanel.BackColor = [System.Drawing.Color]::FromArgb(30,41,59)
-    $navPanel.Padding = New-Object System.Windows.Forms.Padding(12)
+    $navPanel.Padding = New-Object System.Windows.Forms.Padding(14,12,14,10)
+    $workspaceShell.Controls.Add($navPanel,0,0)
 
     $navGrid = New-Object System.Windows.Forms.TableLayoutPanel
     $navGrid.Dock = 'Fill'
@@ -212,12 +223,13 @@ function Show-PBIAutomateMainForm {
         $button.Name = ('Service_' + $service.Id)
         $button.Tag = [string]$service.Id
         $button.Dock = 'Fill'
+        $button.AutoSize = $false
         $button.Height = 56
         $button.Margin = New-Object System.Windows.Forms.Padding(0,4,0,4)
         $button.FlatStyle = 'Flat'
         $button.FlatAppearance.BorderSize = 0
         $button.TextAlign = 'MiddleLeft'
-        $button.Padding = New-Object System.Windows.Forms.Padding(12,0,8,0)
+        $button.Padding = New-Object System.Windows.Forms.Padding(14,0,10,0)
         $button.ForeColor = [System.Drawing.Color]::White
         $button.BackColor = [System.Drawing.Color]::FromArgb(51,65,85)
         if ([string]$service.Status -eq 'Ready') {
@@ -231,8 +243,12 @@ function Show-PBIAutomateMainForm {
         $serviceRowIndex++
     }
 
-    $workspace = $workspaceSplit.Panel2
+    $workspace = New-Object System.Windows.Forms.Panel
+    $workspace.Name = 'ServiceWorkspace'
+    $workspace.Dock = 'Fill'
+    $workspace.Margin = New-Object System.Windows.Forms.Padding(0)
     $workspace.BackColor = [System.Drawing.Color]::FromArgb(245,247,250)
+    $workspaceShell.Controls.Add($workspace,1,0)
 
     $serviceGrid = New-Object System.Windows.Forms.TableLayoutPanel
     $serviceGrid.Dock = 'Fill'
