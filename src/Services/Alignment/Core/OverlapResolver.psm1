@@ -40,7 +40,7 @@ function Get-AlignmentOverlapPairs {
 function Test-AlignmentPlacementFree {
     param(
         [Parameter(Mandatory=$true)]$Candidate,
-        [Parameter(Mandatory=$true)][object[]]$Placed,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Placed,
         [Parameter(Mandatory=$true)][double]$Left,
         [Parameter(Mandatory=$true)][double]$Top,
         [Parameter(Mandatory=$true)][double]$Right,
@@ -67,7 +67,7 @@ function Test-AlignmentPlacementFree {
 function Get-AlignmentCandidateCoordinates {
     param(
         [Parameter(Mandatory=$true)]$Item,
-        [Parameter(Mandatory=$true)][object[]]$Placed,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Placed,
         [Parameter(Mandatory=$true)][double]$Left,
         [Parameter(Mandatory=$true)][double]$Top,
         [Parameter(Mandatory=$true)][double]$Right,
@@ -133,7 +133,7 @@ function Get-AlignmentCandidateCoordinates {
 function Find-NearestFreeAlignmentPlacement {
     param(
         [Parameter(Mandatory=$true)]$Item,
-        [Parameter(Mandatory=$true)][object[]]$Placed,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Placed,
         [Parameter(Mandatory=$true)][double]$Left,
         [Parameter(Mandatory=$true)][double]$Top,
         [Parameter(Mandatory=$true)][double]$Right,
