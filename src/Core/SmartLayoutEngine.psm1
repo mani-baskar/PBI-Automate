@@ -212,6 +212,7 @@ function Get-AreaPreservingPbiLayout {
     }
 
     $proposed = @()
+    $verticalAnchorSnapCount = 0
 
     # Top horizontal band: same Y and height, exact gaps, widths proportional
     # to the original occupied area.
@@ -236,6 +237,7 @@ function Get-AreaPreservingPbiLayout {
 
         if ($mainItems.Count -eq 0) {
             $leftHeights = @(Get-ProportionalLengths -Items $leftItems -TotalLength $belowHeight -Gap $Gap)
+            $leftHeightAnchors = @{}
             $cursorY = $belowTop
 
             for ($i = 0; $i -lt $leftItems.Count; $i++) {
@@ -288,6 +290,14 @@ function Get-AreaPreservingPbiLayout {
                 $item = $leftItems[$i]
                 $height = [double]$leftHeights[$i]
                 $proposed += New-ProposedItem -Item $item -X $ContentLeft -Y $cursorY -Width $leftWidth -Height $height -Column ([int]$item.Column) -Row ([int]$item.Row) -ColumnSpan 1 -RowSpan ([int]$item.RowSpan)
+
+                if ([int]$item.RowSpan -eq 1) {
+                    $leftHeightAnchors[[string][int]$item.Row] = [pscustomobject]@{
+                        OriginalHeight = [double]$item.Height
+                        ProposedHeight = [double]$height
+                    }
+                }
+
                 $cursorY += $height + $Gap
             }
 
@@ -309,25 +319,68 @@ function Get-AreaPreservingPbiLayout {
                 $rowUsableWidth = $mainWidth - (($rowItems.Count - 1) * $Gap)
                 if ($rowUsableWidth -le 0) { return $null }
 
+                $rowOriginalMedianHeight = Get-MedianNumber -Values ([double[]]@($rowItems | ForEach-Object { $_.Height }))
+                $anchorHeight = $null
+                $rowKey = [string][int]$rowNumber
+
+                if ($leftHeightAnchors.ContainsKey($rowKey)) {
+                    $leftAnchor = $leftHeightAnchors[$rowKey]
+                    if (Test-NearAnchorDimension -Value $rowOriginalMedianHeight -Anchor ([double]$leftAnchor.OriginalHeight) -Gap $Gap) {
+                        $anchorHeight = [double]$leftAnchor.ProposedHeight
+                    }
+                }
+
                 $rowGroups += [pscustomobject]@{
                     Row = [int]$rowNumber
                     Items = $rowItems
                     Area = $rowArea
                     UsableWidth = $rowUsableWidth
                     DemandHeight = [Math]::Max(1.0,($rowArea / $rowUsableWidth))
+                    AnchorHeight = $anchorHeight
                 }
             }
 
             $mainUsableHeight = $belowHeight - (($rowGroups.Count - 1) * $Gap)
             if ($mainUsableHeight -le 0) { return $null }
 
-            $totalDemand = [double](($rowGroups | Measure-Object -Property DemandHeight -Sum).Sum)
-            if ($totalDemand -le 0) { return $null }
+            $anchoredHeightTotal = 0.0
+            $flexDemandTotal = 0.0
+            foreach ($rowGroup in $rowGroups) {
+                if ($null -ne $rowGroup.AnchorHeight) {
+                    $anchoredHeightTotal += [double]$rowGroup.AnchorHeight
+                }
+                else {
+                    $flexDemandTotal += [double]$rowGroup.DemandHeight
+                }
+            }
 
+            # If the primary-left height anchors cannot fit, fall back to
+            # proportional heights rather than force an invalid layout.
+            $useHeightAnchors = ($anchoredHeightTotal -lt ($mainUsableHeight - 0.01))
+            if (-not $useHeightAnchors) {
+                $anchoredHeightTotal = 0.0
+                $flexDemandTotal = [double](($rowGroups | Measure-Object -Property DemandHeight -Sum).Sum)
+            }
+
+            if ($flexDemandTotal -le 0 -and $anchoredHeightTotal -le 0) { return $null }
+
+            $remainingHeight = $mainUsableHeight - $anchoredHeightTotal
             $cursorY = $belowTop
 
             foreach ($rowGroup in $rowGroups) {
-                $rowHeight = $mainUsableHeight * ([double]$rowGroup.DemandHeight / $totalDemand)
+                $rowHeight = 0.0
+
+                if ($useHeightAnchors -and $null -ne $rowGroup.AnchorHeight) {
+                    $rowHeight = [double]$rowGroup.AnchorHeight
+                    $verticalAnchorSnapCount++
+                }
+                elseif ($flexDemandTotal -gt 0) {
+                    $rowHeight = $remainingHeight * ([double]$rowGroup.DemandHeight / $flexDemandTotal)
+                }
+                else {
+                    $rowHeight = $remainingHeight / [Math]::Max(1,$rowGroups.Count)
+                }
+
                 $rowItems = @($rowGroup.Items)
                 $rowWidths = @(Get-ProportionalLengths -Items $rowItems -TotalLength $mainWidth -Gap $Gap)
                 $cursorX = $mainLeft
@@ -378,6 +431,7 @@ function Get-AreaPreservingPbiLayout {
         Rows = [int]$Analysis.RowCount
         LayoutStrategy = 'Area Preserve'
         AnchorSnapUsed = [bool]($null -ne (Get-Variable -Name leftWidthAnchoredToTop -Scope 0 -ErrorAction SilentlyContinue) -and $leftWidthAnchoredToTop)
+        VerticalAnchorSnapCount = [int]$verticalAnchorSnapCount
         MaxAreaShareDeltaPercent = [Math]::Round($maxShareDelta,2)
         Items = $proposed
         ChangedCount = @($proposed | Where-Object { $_.Changed }).Count
