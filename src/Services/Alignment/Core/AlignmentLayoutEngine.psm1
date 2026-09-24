@@ -445,7 +445,68 @@ function Get-AreaPreservingPbiLayout {
     }
 }
 
-function Get-RegionPreservingPbiLayout {
+function Get-CappedProportionalLengths {
+    param(
+        [Parameter(Mandatory=$true)][double[]]$SourceLengths,
+        [Parameter(Mandatory=$true)][double]$TotalLength,
+        [Parameter(Mandatory=$true)][double]$Gap,
+        [double]$MaxGrowth = 1.40
+    )
+
+    if ($SourceLengths.Count -eq 0) { return @() }
+
+    $usable = $TotalLength - (($SourceLengths.Count - 1) * $Gap)
+    if ($usable -le 0) { return @() }
+
+    $sourceTotal = [double](($SourceLengths | Measure-Object -Sum).Sum)
+    if ($sourceTotal -le 0) { return @() }
+
+    $scale = $usable / $sourceTotal
+    if ($scale -gt $MaxGrowth) { $scale = $MaxGrowth }
+
+    $result = @()
+    foreach ($length in $SourceLengths) {
+        $result += [Math]::Max(1.0,([double]$length * $scale))
+    }
+    return @($result)
+}
+
+function Get-AnchorIndex {
+    param(
+        [Parameter(Mandatory=$true)][double]$Value,
+        [Parameter(Mandatory=$true)][double[]]$Starts
+    )
+
+    if ($Starts.Count -eq 0) { return 0 }
+    $best = 0
+    $bestDistance = [double]::MaxValue
+    for ($i = 0; $i -lt $Starts.Count; $i++) {
+        $distance = [Math]::Abs($Value - [double]$Starts[$i])
+        if ($distance -lt $bestDistance) {
+            $bestDistance = $distance
+            $best = $i
+        }
+    }
+    return $best
+}
+
+function Get-AnchorSpan {
+    param(
+        [Parameter(Mandatory=$true)][int]$StartIndex,
+        [Parameter(Mandatory=$true)][double]$EndCoordinate,
+        [Parameter(Mandatory=$true)][double[]]$Starts,
+        [Parameter(Mandatory=$true)][double]$Slack
+    )
+
+    if ($Starts.Count -eq 0) { return 1 }
+    $span = 1
+    for ($i = $StartIndex + 1; $i -lt $Starts.Count; $i++) {
+        if ([double]$Starts[$i] -lt ($EndCoordinate - $Slack)) { $span++ } else { break }
+    }
+    return [Math]::Max(1,$span)
+}
+
+function Get-FrameAnchoredPbiLayout {
     param(
         [Parameter(Mandatory=$true)]$Analysis,
         [Parameter(Mandatory=$true)][double]$ContentLeft,
@@ -458,49 +519,111 @@ function Get-RegionPreservingPbiLayout {
 
     $managed = @($Analysis.Items | Where-Object { -not ($_.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$_.IsLocked) })
     $locked = @($Analysis.Items | Where-Object { $_.PSObject.Properties.Name -contains 'IsLocked' -and [bool]$_.IsLocked })
-    if ($managed.Count -eq 0) { return $null }
+    if ($managed.Count -lt 2) { return $null }
 
-    $minX = [double](($managed | Measure-Object -Property X -Minimum).Minimum)
-    $minY = [double](($managed | Measure-Object -Property Y -Minimum).Minimum)
-    $maxRight = [double](($managed | ForEach-Object { [double]$_.X + [double]$_.Width } | Measure-Object -Maximum).Maximum)
-    $maxBottom = [double](($managed | ForEach-Object { [double]$_.Y + [double]$_.Height } | Measure-Object -Maximum).Maximum)
-    $sourceWidth = $maxRight - $minX
-    $sourceHeight = $maxBottom - $minY
+    $medianHeight = Get-MedianNumber -Values ([double[]]@($managed | ForEach-Object { $_.Height }))
+    $topY = [double](($managed | Measure-Object -Property Y -Minimum).Minimum)
+    $topTolerance = [Math]::Max(($Gap * 2.0),($medianHeight * 0.35))
+    $topCandidates = @($managed | Where-Object { [Math]::Abs([double]$_.Y - $topY) -le $topTolerance } | Sort-Object X)
+    if ($topCandidates.Count -lt 2) { return $null }
+
+    $topMedianHeight = Get-MedianNumber -Values ([double[]]@($topCandidates | ForEach-Object { $_.Height }))
+    $topItems = @($topCandidates | Where-Object { [double]$_.Height -le ([Math]::Max(1.0,$topMedianHeight) * 2.0) } | Sort-Object X)
+    if ($topItems.Count -lt 2) { return $null }
+
     $contentWidth = $ContentRight - $ContentLeft
     $contentHeight = $ContentBottom - $ContentTop
-    if ($sourceWidth -le 0 -or $sourceHeight -le 0 -or $contentWidth -le 0 -or $contentHeight -le 0) { return $null }
+    if ($contentWidth -le 0 -or $contentHeight -le 0) { return $null }
 
-    $scaleX = [Math]::Min(($contentWidth / $sourceWidth),1.08)
-    $scaleY = [Math]::Min(($contentHeight / $sourceHeight),1.08)
-    if ($scaleX -le 0 -or $scaleY -le 0) { return $null }
+    # TOP is the primary horizontal anchor. Preserve original width ratios and
+    # spend only the configured gaps between them.
+    $topSourceWidths = [double[]]@($topItems | ForEach-Object { [double]$_.Width })
+    $topUsableWidth = $contentWidth - (($topItems.Count - 1) * $Gap)
+    if ($topUsableWidth -le 0) { return $null }
+    $topSourceTotal = [double](($topSourceWidths | Measure-Object -Sum).Sum)
+    if ($topSourceTotal -le 0) { return $null }
+
+    $columnWidths = @()
+    foreach ($sourceWidth in $topSourceWidths) {
+        $columnWidths += ($topUsableWidth * ([double]$sourceWidth / $topSourceTotal))
+    }
+
+    $topHeight = [Math]::Min([Math]::Max(8.0,$topMedianHeight),($contentHeight * 0.28))
+    $belowTop = $ContentTop + $topHeight + $Gap
+    $belowHeight = $ContentBottom - $belowTop
+    if ($belowHeight -le 0) { return $null }
+
+    $topIds = @{}
+    foreach ($item in $topItems) { $topIds[[string]$item.Id] = $true }
+    $lowerItems = @($managed | Where-Object { -not $topIds.ContainsKey([string]$_.Id) })
+    if ($lowerItems.Count -eq 0) { return $null }
+
+    # LEFT is the primary vertical anchor. Its original height proportions
+    # define row tracks. Growth is capped so a sparse page cannot create
+    # unnaturally tall cards.
+    $medianWidth = Get-MedianNumber -Values ([double[]]@($lowerItems | ForEach-Object { $_.Width }))
+    $leftX = [double](($lowerItems | Measure-Object -Property X -Minimum).Minimum)
+    $leftTolerance = [Math]::Max(($Gap * 2.0),($medianWidth * 0.18))
+    $leftItems = @($lowerItems | Where-Object { [Math]::Abs([double]$_.X - $leftX) -le $leftTolerance } | Sort-Object Y)
+    if ($leftItems.Count -eq 0) { return $null }
+
+    $rowSourceHeights = [double[]]@($leftItems | ForEach-Object { [double]$_.Height })
+    $rowHeights = @(Get-CappedProportionalLengths -SourceLengths $rowSourceHeights -TotalLength $belowHeight -Gap $Gap -MaxGrowth 1.40)
+    if ($rowHeights.Count -ne $leftItems.Count) { return $null }
+
+    $sourceColumnStarts = [double[]]@($topItems | ForEach-Object { [double]$_.X })
+    $sourceRowStarts = [double[]]@($leftItems | ForEach-Object { [double]$_.Y })
+    $columnSlack = [Math]::Max(1.0,$Gap * 0.25)
+    $rowSlack = [Math]::Max(1.0,$Gap * 0.25)
+
+    $columnXs = @()
+    $cursorX = $ContentLeft
+    for ($i = 0; $i -lt $columnWidths.Count; $i++) {
+        $columnXs += $cursorX
+        $cursorX += [double]$columnWidths[$i] + $Gap
+    }
+
+    $rowYs = @()
+    $cursorY = $belowTop
+    for ($i = 0; $i -lt $rowHeights.Count; $i++) {
+        $rowYs += $cursorY
+        $cursorY += [double]$rowHeights[$i] + $Gap
+    }
 
     $proposed = @()
-    foreach ($item in $managed) {
-        $x = $ContentLeft + (([double]$item.X - $minX) * $scaleX)
-        $y = $ContentTop + (([double]$item.Y - $minY) * $scaleY)
-        $width = [double]$item.Width * $scaleX
-        $height = [double]$item.Height * $scaleY
-        $proposed += New-ProposedItem -Item $item -X $x -Y $y -Width $width -Height $height -Column ([int]$item.Column) -Row ([int]$item.Row) -ColumnSpan ([int]$item.ColumnSpan) -RowSpan ([int]$item.RowSpan)
+
+    # Place top anchors first.
+    for ($i = 0; $i -lt $topItems.Count; $i++) {
+        $item = $topItems[$i]
+        $proposed += New-ProposedItem -Item $item -X ([double]$columnXs[$i]) -Y $ContentTop -Width ([double]$columnWidths[$i]) -Height $topHeight -Column $i -Row 0 -ColumnSpan 1 -RowSpan 1
+    }
+
+    # Everything below the top row snaps to the top/left anchor tracks.
+    foreach ($item in $lowerItems) {
+        $col = Get-AnchorIndex -Value ([double]$item.X) -Starts $sourceColumnStarts
+        $row = Get-AnchorIndex -Value ([double]$item.Y) -Starts $sourceRowStarts
+
+        $colSpan = Get-AnchorSpan -StartIndex $col -EndCoordinate ([double]$item.X + [double]$item.Width) -Starts $sourceColumnStarts -Slack $columnSlack
+        $rowSpan = Get-AnchorSpan -StartIndex $row -EndCoordinate ([double]$item.Y + [double]$item.Height) -Starts $sourceRowStarts -Slack $rowSlack
+
+        $colSpan = [Math]::Min([Math]::Max(1,$colSpan),$columnWidths.Count - $col)
+        $rowSpan = [Math]::Min([Math]::Max(1,$rowSpan),$rowHeights.Count - $row)
+
+        $width = 0.0
+        for ($i = $col; $i -lt ($col + $colSpan); $i++) { $width += [double]$columnWidths[$i] }
+        if ($colSpan -gt 1) { $width += (($colSpan - 1) * $Gap) }
+
+        $height = 0.0
+        for ($i = $row; $i -lt ($row + $rowSpan); $i++) { $height += [double]$rowHeights[$i] }
+        if ($rowSpan -gt 1) { $height += (($rowSpan - 1) * $Gap) }
+
+        $proposed += New-ProposedItem -Item $item -X ([double]$columnXs[$col]) -Y ([double]$rowYs[$row]) -Width $width -Height $height -Column $col -Row ($row + 1) -ColumnSpan $colSpan -RowSpan $rowSpan
     }
 
     foreach ($item in $locked) {
         $reason = $null
         if ($item.PSObject.Properties.Name -contains 'ProtectionReason') { $reason = $item.ProtectionReason }
         $proposed += New-ProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -Column 0 -Row 0 -ColumnSpan 1 -RowSpan 1 -IsLocked $true -AllowOverlap ([bool]$item.AllowOverlap) -ProtectionReason $reason
-    }
-
-    $originalAreaTotal = 0.0
-    $proposedAreaTotal = 0.0
-    foreach ($item in $managed) { $originalAreaTotal += ([double]$item.Width * [double]$item.Height) }
-    foreach ($item in @($proposed | Where-Object { -not $_.IsLocked })) { $proposedAreaTotal += ([double]$item.Width * [double]$item.Height) }
-    $maxShareDelta = 0.0
-    if ($originalAreaTotal -gt 0 -and $proposedAreaTotal -gt 0) {
-        foreach ($item in @($proposed | Where-Object { -not $_.IsLocked })) {
-            $sourceItem = @($managed | Where-Object { $_.Id -eq $item.Id })[0]
-            $oldShare = (([double]$sourceItem.Width * [double]$sourceItem.Height) / $originalAreaTotal)
-            $newShare = (([double]$item.Width * [double]$item.Height) / $proposedAreaTotal)
-            $maxShareDelta = [Math]::Max($maxShareDelta,[Math]::Abs($newShare - $oldShare) * 100.0)
-        }
     }
 
     [pscustomobject]@{
@@ -512,12 +635,14 @@ function Get-RegionPreservingPbiLayout {
         ContentTop = [Math]::Round($ContentTop,3)
         ContentRight = [Math]::Round($ContentRight,3)
         ContentBottom = [Math]::Round($ContentBottom,3)
-        Columns = [int]$Analysis.ColumnCount
-        Rows = [int]$Analysis.RowCount
-        LayoutStrategy = 'Region Preserve'
-        RegionScaleX = [Math]::Round($scaleX,5)
-        RegionScaleY = [Math]::Round($scaleY,5)
-        MaxAreaShareDeltaPercent = [Math]::Round($maxShareDelta,4)
+        Columns = $columnWidths.Count
+        Rows = $rowHeights.Count + 1
+        LayoutStrategy = 'Frame Anchors'
+        TopAnchorCount = $topItems.Count
+        LeftAnchorCount = $leftItems.Count
+        TopWidthRatioPreserved = $true
+        LeftHeightGrowthCap = 1.40
+        MaxAreaShareDeltaPercent = $null
         Items = $proposed
         ChangedCount = @($proposed | Where-Object { $_.Changed }).Count
     }
@@ -655,11 +780,14 @@ function Get-SmartPbiLayout {
         throw 'Protected header/footer/sidebar regions leave no usable content area for Smart Align.'
     }
 
+    # Primary strategy: TOP widths define horizontal tracks; LEFT heights define
+    # vertical tracks. This matches the report-authoring pattern used by the
+    # alignment service and preserves those original proportions.
+    $frameLayout = Get-FrameAnchoredPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
+    if ($null -ne $frameLayout) { return $frameLayout }
+
     $areaLayout = Get-AreaPreservingPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
     if ($null -ne $areaLayout) { return $areaLayout }
-
-    $regionLayout = Get-RegionPreservingPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
-    if ($null -ne $regionLayout) { return $regionLayout }
 
     return Get-WeightedTrackPbiLayout -Analysis $Analysis -ContentLeft $contentLeft -ContentTop $contentTop -ContentRight $contentRight -ContentBottom $contentBottom -Gap $Gap -Margin $Margin
 }
