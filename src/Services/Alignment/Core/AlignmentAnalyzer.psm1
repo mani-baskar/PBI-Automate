@@ -193,19 +193,6 @@ function Get-VisualProtectionReason {
         [Parameter(Mandatory=$true)][double]$PageHeight
     )
 
-    if ($Visual.PSObject.Properties.Name -contains 'IsHidden' -and [bool]$Visual.IsHidden) {
-        return 'Hidden'
-    }
-
-    if ($Visual.PSObject.Properties.Name -contains 'IsVisualGroup' -and [bool]$Visual.IsVisualGroup) {
-        return 'VisualGroup'
-    }
-
-    if ($Visual.PSObject.Properties.Name -contains 'ParentGroupName' -and
-        -not [string]::IsNullOrWhiteSpace([string]$Visual.ParentGroupName)) {
-        return 'GroupedChild'
-    }
-
     if ($PageWidth -le 0 -or $PageHeight -le 0) {
         return $null
     }
@@ -267,6 +254,8 @@ function Get-PbiLayoutAnalysis {
 
     $locked = @()
     $visuals = @()
+    $ignoredHidden = @()
+    $ignoredGroups = @()
     $protectionReasons = @{}
 
     $reservedLeft = 0.0
@@ -275,6 +264,23 @@ function Get-PbiLayoutAnalysis {
     $reservedBottom = [double]$PageSnapshot.Height
 
     foreach ($visual in $allVisuals) {
+        $effectiveHidden = if ($visual.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$visual.EffectiveHidden } else { [bool]$visual.IsHidden }
+
+        # Hidden visuals are not part of the active canvas. Ignore them entirely
+        # so bookmarks/templates can contain hundreds of alternate visuals
+        # without polluting alignment analysis.
+        if ($effectiveHidden) {
+            $ignoredHidden += $visual
+            continue
+        }
+
+        # visualGroup is a structural container, not a renderable content visual.
+        # Its visible children can still participate in alignment.
+        if ($visual.PSObject.Properties.Name -contains 'IsVisualGroup' -and [bool]$visual.IsVisualGroup) {
+            $ignoredGroups += $visual
+            continue
+        }
+
         $reason = Get-VisualProtectionReason -Visual $visual -PageWidth ([double]$PageSnapshot.Width) -PageHeight ([double]$PageSnapshot.Height)
 
         if ([string]::IsNullOrWhiteSpace([string]$reason)) {
@@ -294,7 +300,7 @@ function Get-PbiLayoutAnalysis {
     }
 
     if ($visuals.Count -eq 0) {
-        throw 'No layout-managed visuals remain after protecting background, structural, grouped, or hidden visuals.'
+        throw ('No active visible visuals are available for alignment. Total={0}, hidden={1}, group containers={2}, structural={3}.' -f $allVisuals.Count,$ignoredHidden.Count,$ignoredGroups.Count,$locked.Count)
     }
 
     $medianWidth = Get-MedianValue -Values ([double[]]@($visuals | ForEach-Object { $_.Width }))
@@ -329,6 +335,7 @@ function Get-PbiLayoutAnalysis {
             ParentGroupName = $v.ParentGroupName
             IsVisualGroup = $v.IsVisualGroup
             IsHidden = $v.IsHidden
+            EffectiveHidden = $(if ($v.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$v.EffectiveHidden } else { [bool]$v.IsHidden })
             ProtectionReason = $null
             X = [double]$v.X
             Y = [double]$v.Y
@@ -358,6 +365,7 @@ function Get-PbiLayoutAnalysis {
             ParentGroupName = $v.ParentGroupName
             IsVisualGroup = $v.IsVisualGroup
             IsHidden = $v.IsHidden
+            EffectiveHidden = $(if ($v.PSObject.Properties.Name -contains 'EffectiveHidden') { [bool]$v.EffectiveHidden } else { [bool]$v.IsHidden })
             ProtectionReason = [string]$protectionReasons[[string]$v.Id]
             X = [double]$v.X
             Y = [double]$v.Y
@@ -377,8 +385,12 @@ function Get-PbiLayoutAnalysis {
         PageWidth = [double]$PageSnapshot.Width
         PageHeight = [double]$PageSnapshot.Height
         VisualCount = $allVisuals.Count
+        ActiveVisualCount = $visuals.Count + $locked.Count
         ManagedVisualCount = $visuals.Count
         LockedVisualCount = $locked.Count
+        HiddenVisualCount = $ignoredHidden.Count
+        GroupContainerCount = $ignoredGroups.Count
+        ActiveGroupedVisualCount = @($visuals | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.ParentGroupName) }).Count
         ReservedLeft = $reservedLeft
         ReservedTop = $reservedTop
         ReservedRight = $reservedRight
