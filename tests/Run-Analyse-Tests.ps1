@@ -66,6 +66,10 @@ try {
     Assert-Analyse ($startupText -match 'Show-PBIAutomateMainForm\s+-RootPath\s+\$root') 'Desktop startup keeps the normal modal MainForm lifecycle'
     Assert-Analyse ($startupText -match 'Add-PbiAnalyseUi') 'Analyse UI is attached without replacing the MainForm lifecycle'
 
+    Assert-Analyse (Test-PbiAnalyseSystemTableName -Name 'LocalDateTable_91615499-4708-45c1-92c9-1993daf21694') 'Power BI LocalDateTable is classified as an internal system table'
+    Assert-Analyse (Test-PbiAnalyseSystemTableName -Name 'DateTableTemplate_91615499-4708-45c1-92c9-1993daf21694') 'Power BI DateTableTemplate is classified as an internal system table'
+    Assert-Analyse (-not (Test-PbiAnalyseSystemTableName -Name 'Sales Date')) 'Normal user table is not classified as a system table'
+
     $pbip = Join-Path $root 'PBI Demo\Demo 1.pbip'
     Assert-Analyse (Test-Path -LiteralPath $pbip -PathType Leaf) 'Checked-in PBIP Analyse fixture exists'
 
@@ -87,6 +91,9 @@ try {
     Assert-Analyse (@($dateTable.Columns | Where-Object { $_.IsCalculated }).Count -ge 1) 'Calculated column DAX is detected'
     Assert-Analyse (@($dateTable.Partitions | Where-Object { $_.Type -eq 'calculated' }).Count -eq 1) 'Calculated table partition DAX is detected'
 
+    $projectInfo = Get-PbiAnalyseProjectInfo -ProjectPath $pbip
+    Assert-Analyse ($projectInfo.SkippedSystemTableCount -ge 1) 'Analyse scan excludes Power BI auto Date/Time tables from user table count'
+
     $relationships = @(Get-PbiTmdlRelationships -Path $semantic.RelationshipsFile)
     Assert-Analyse ($relationships.Count -eq 1) 'Relationship TMDL is parsed'
     Assert-Analyse ($relationships[0].FromTable -eq 'financials') 'Relationship from table is parsed'
@@ -99,8 +106,11 @@ try {
     $export = Invoke-PbiAnalyseExport -ProjectPath $pbip -OutputRoot $tempRoot
     Assert-Analyse (Test-Path -LiteralPath $export.OutputFolder -PathType Container) 'Analyse output folder is created'
     Assert-Analyse (Test-Path -LiteralPath (Join-Path $export.OutputFolder 'Table\financials.md') -PathType Leaf) 'Per-table Markdown is generated'
+    Assert-Analyse (@(Get-ChildItem -LiteralPath (Join-Path $export.OutputFolder 'Table') -Filter 'DateTableTemplate_*.md' -File -ErrorAction SilentlyContinue).Count -eq 0) 'Power BI DateTableTemplate Markdown is skipped'
+    Assert-Analyse (@(Get-ChildItem -LiteralPath (Join-Path $export.OutputFolder 'Table') -Filter 'LocalDateTable_*.md' -File -ErrorAction SilentlyContinue).Count -eq 0) 'Power BI LocalDateTable Markdown is skipped'
     Assert-Analyse (Test-Path -LiteralPath (Join-Path $export.OutputFolder 'Relationship\Relationships.md') -PathType Leaf) 'Relationship Markdown is generated'
     Assert-Analyse (Test-Path -LiteralPath (Join-Path $export.OutputFolder 'Pages\README.md') -PathType Leaf) 'Pages Markdown is generated'
+    Assert-Analyse ((Get-PbiAnalyseExistingOutputFolder -OutputRoot $tempRoot) -eq $export.OutputFolder) 'Generated Analyse folder can be rediscovered from its output root'
 
     $financialMd = Get-Content -LiteralPath (Join-Path $export.OutputFolder 'Table\financials.md') -Raw -Encoding UTF8
     Assert-Analyse ($financialMd -match '<details>') 'Table Markdown uses collapsed details blocks'
@@ -115,9 +125,15 @@ try {
     $form = Show-PBIAutomateMainForm -RootPath $root -BuildOnly
     Add-PbiAnalyseUi -Form $form -RootPath $root | Out-Null
     Assert-Analyse ($null -ne (Find-TestControl -Parent $form -Name 'Service_analyse')) 'Analyse appears in service navigation'
-    Assert-Analyse ($null -ne (Find-TestControl -Parent $form -Name 'AnalyseOutputRoot')) 'Analyse output folder control exists'
+    $outputControl = Find-TestControl -Parent $form -Name 'AnalyseOutputRoot'
+    $openControl = Find-TestControl -Parent $form -Name 'AnalyseOpenFolderButton'
+    Assert-Analyse ($null -ne $outputControl) 'Analyse output folder control exists'
     Assert-Analyse ($null -ne (Find-TestControl -Parent $form -Name 'AnalyseGenerateButton')) 'Analyse Generate Markdown button exists'
+    Assert-Analyse ($null -ne $openControl) 'Analyse Open button exists'
     Assert-Analyse ($null -ne (Find-TestControl -Parent $form -Name 'AnalyseContent')) 'Analyse main workspace exists'
+    $outputControl.Text = $tempRoot
+    [System.Windows.Forms.Application]::DoEvents()
+    Assert-Analyse ($openControl.Enabled) 'Open Analyse becomes available when generated documentation already exists'
     $form.Dispose()
 
     Write-Host ''
