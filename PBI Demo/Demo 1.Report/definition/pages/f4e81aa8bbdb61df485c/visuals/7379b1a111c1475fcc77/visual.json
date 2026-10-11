@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "7379b1a111c1475fcc77",
   "position": {
-    "x": 932.27963525835867,
-    "y": 266.99088145896656,
+    "x": 672.025,
+    "y": 242.051,
     "z": 10000,
-    "height": 442.06686930091183,
-    "width": 582.12765957446811,
+    "height": 447.933,
+    "width": 539.953,
     "tabOrder": 10000
   },
   "visual": {
@@ -81,5 +81,42 @@
       }
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "6c8ece66cafe97435326",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "financials"
+              }
+            },
+            "Property": "Country"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2ea33c4f7fcc0ea74a04",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "financials"
+                  }
+                },
+                "Property": "Profit"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

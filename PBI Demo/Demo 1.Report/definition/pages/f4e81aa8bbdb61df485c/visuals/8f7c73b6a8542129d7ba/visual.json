@@ -2,11 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.13.0/schema.json",
   "name": "8f7c73b6a8542129d7ba",
   "position": {
-    "x": 1549.4224924012158,
-    "y": 291.79331306990883,
+    "x": 1236.978,
+    "y": 242.051,
     "z": 11000,
-    "height": 442.06686930091183,
-    "width": 342.85714285714283,
+    "height": 447.933,
+    "width": 658.022,
     "tabOrder": 11000
   },
   "visual": {
@@ -81,5 +81,42 @@
       }
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "eaa94c3f5c9b35cf6ed8",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "financials"
+              }
+            },
+            "Property": "Product"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "42995628a3f3f97796be",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "financials"
+                  }
+                },
+                "Property": "Sales"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }
