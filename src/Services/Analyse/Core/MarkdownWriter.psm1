@@ -19,7 +19,8 @@ function Protect-AnalyseText {
     $safe = [string]$Text
     $safe = [regex]::Replace($safe,'(?i)(Password|Pwd|AccessToken|RefreshToken|Token|ClientSecret|ApiKey|Api_Key|Credential)\s*=\s*"(?:[^"]|"")*"','$1="<redacted>"')
     $safe = [regex]::Replace($safe,'(?i)(Password|Pwd|AccessToken|RefreshToken|Token|ClientSecret|ApiKey|Api_Key|Credential)\s*=\s*([^;,\]\}\r\n]+)','$1=<redacted>')
-    $safe = [regex]::Replace($safe,"(?i)([?&](?:access_token|token|api_key|apikey|sig|client_secret)=)[^&\s\"']+",'$1<redacted>')
+    $urlSecretPattern = '(?i)([?&](?:access_token|token|api_key|apikey|sig|client_secret)=)[^&\s"]+'
+    $safe = [regex]::Replace($safe,$urlSecretPattern,'$1<redacted>')
     return $safe
 }
 
