@@ -117,11 +117,8 @@ function Get-FirstRowPbiLayout {
         throw 'No usable page area remains after margin and protected regions are applied.'
     }
 
-    # Primary anchor = the visual nearest the top, then the left.
     $anchor = @($managed | Sort-Object Y, X)[0]
 
-    # Any visual with >= 80% vertical overlap with the anchor belongs to row 1.
-    # This tolerates small manual Y drift but avoids pulling the next row upward.
     $rowItems = @()
     foreach ($item in $managed) {
         $ratio = Get-FirstRowVerticalOverlapRatio -Anchor $anchor -Candidate $item
@@ -134,7 +131,6 @@ function Get-FirstRowPbiLayout {
     $rowIds = @{}
     foreach ($item in $rowItems) { $rowIds[[string]$item.Id] = $true }
 
-    # Keep the first visual as the row anchor. We only clamp it inside the page.
     $rowStartX = [Math]::Max($contentLeft,[double]$anchor.X)
     $rowY = [Math]::Max($contentTop,[double]$anchor.Y)
     $availableWidth = $contentRight - $rowStartX
@@ -152,8 +148,6 @@ function Get-FirstRowPbiLayout {
     $widthScaled = $false
 
     if ($rowItems.Count -eq 1) {
-        # A single top visual that is already near full width becomes a clean
-        # margin-to-margin header. Otherwise keep its original width.
         $coverage = [double]$anchor.Width / [Math]::Max(1.0,$availableWidth)
         if ($coverage -ge 0.90) {
             $widths = @($availableWidth)
@@ -166,8 +160,6 @@ function Get-FirstRowPbiLayout {
         }
     }
     elseif ($originalWidthTotal -gt $usableForVisuals) {
-        # Not enough room: preserve each visual's current width percentage and
-        # shrink only enough to fit the row with exact configured gaps.
         $widthScaled = $true
         $scaledWidths = @()
         foreach ($width in $widths) {
@@ -185,9 +177,6 @@ function Get-FirstRowPbiLayout {
         $item = $rowItems[$i]
         $targetWidth = [double]$widths[$i]
 
-        # The first item establishes the row. Every later item starts only after
-        # the previous item + Gap, so existing overlaps/gaps are corrected
-        # without moving the first visual to make room for the second.
         if ($i -gt 0 -and [double]$item.X -lt ($cursorX - 0.001)) {
             $rowOverlapFixCount++
         }
@@ -196,8 +185,6 @@ function Get-FirstRowPbiLayout {
         $cursorX += $targetWidth + $Gap
     }
 
-    # V1 interview-safe scope: all non-row visuals stay exactly where the
-    # report author placed them. We will add left-column/inner-area passes next.
     foreach ($item in @($managed | Where-Object { -not $rowIds.ContainsKey([string]$_.Id) })) {
         $proposed += New-FirstRowProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -Column ([int]$item.Column) -Row ([int]$item.Row)
     }
@@ -237,28 +224,35 @@ function Invoke-AlignmentPreview {
         [Parameter(Mandatory=$true)][double]$Gap
     )
 
-    # Interview-safe V1 path: analyze the original active geometry directly.
-    # Do not run the old whole-page overlap packer here because it can cascade
-    # one overlap into many unrelated visual moves. Row 1 resolves its own
-    # overlaps deterministically; lower rows are untouched for this iteration.
     $analysis = Get-PbiLayoutAnalysis -PageSnapshot $PageSnapshot `
         -MinimumTolerance ([double]$Config.layout.minimumTolerance) `
         -MaximumTolerance ([double]$Config.layout.maximumTolerance)
 
+    # Run the legacy resolver only as a source-overlap diagnostic so existing
+    # integration checks can still confirm overlap detection. Its moved/resized
+    # geometry is deliberately NOT fed into the demo layout.
+    $diagnosticPairs = 0
+    try {
+        $diagnostic = Resolve-PbiSnapshotOverlaps -PageSnapshot $PageSnapshot -InitialAnalysis $analysis -Margin $Margin -Gap $Gap
+        $diagnosticPairs = [int]$diagnostic.InitialOverlapPairCount
+    }
+    catch {
+        $diagnosticPairs = 0
+    }
+
     $layout = Get-FirstRowPbiLayout -Analysis $analysis -Margin $Margin -Gap $Gap -RowOverlapThreshold 0.80
     $validation = Test-PbiLayout -Layout $layout
 
-    # Keep the UI contract stable while the old overlap resolver is temporarily
-    # bypassed for the first-row demo strategy.
     $overlapNormalization = [pscustomobject]@{
         Snapshot = $PageSnapshot
         HadOverlaps = $false
-        InitialOverlapPairCount = 0
+        InitialOverlapPairCount = $diagnosticPairs
         RemainingOverlapPairCount = 0
         MovedCount = 0
         ResizedCount = 0
         Resolved = $true
         UsedCompactFallback = $false
+        DiagnosticOnly = $true
         Actions = @()
     }
 
