@@ -1,6 +1,6 @@
 Set-StrictMode -Version 2.0
 
-function Get-FirstRowVerticalOverlapRatio {
+function Get-AlignmentVerticalContainmentRatio {
     param(
         [Parameter(Mandatory=$true)]$Anchor,
         [Parameter(Mandatory=$true)]$Candidate
@@ -14,30 +14,16 @@ function Get-FirstRowVerticalOverlapRatio {
     $overlapTop = [Math]::Max($anchorTop,$candidateTop)
     $overlapBottom = [Math]::Min($anchorBottom,$candidateBottom)
     $overlap = [Math]::Max(0.0,($overlapBottom - $overlapTop))
-    $baseHeight = [Math]::Min([double]$Anchor.Height,[double]$Candidate.Height)
 
-    if ($baseHeight -le 0) { return 0.0 }
-    return ($overlap / $baseHeight)
+    # User rule: a visual belongs to the anchor row when at least 80% of
+    # that candidate visual's height falls inside the anchor's height band.
+    $candidateHeight = [double]$Candidate.Height
+    if ($candidateHeight -le 0) { return 0.0 }
+
+    return ($overlap / $candidateHeight)
 }
 
-function Test-FirstRowRectOverlap {
-    param(
-        [Parameter(Mandatory=$true)][double]$X,
-        [Parameter(Mandatory=$true)][double]$Y,
-        [Parameter(Mandatory=$true)][double]$Width,
-        [Parameter(Mandatory=$true)][double]$Height,
-        [Parameter(Mandatory=$true)]$Other
-    )
-
-    return (
-        $X -lt ([double]$Other.X + [double]$Other.Width) -and
-        ($X + $Width) -gt [double]$Other.X -and
-        $Y -lt ([double]$Other.Y + [double]$Other.Height) -and
-        ($Y + $Height) -gt [double]$Other.Y
-    )
-}
-
-function New-FirstRowProposedItem {
+function New-AlignmentProposedItem {
     param(
         [Parameter(Mandatory=$true)]$Item,
         [Parameter(Mandatory=$true)][double]$X,
@@ -105,13 +91,55 @@ function New-FirstRowProposedItem {
     }
 }
 
-function Get-FirstRowPbiLayout {
+function Get-AlignmentRowGroups {
+    param(
+        [Parameter(Mandatory=$true)][object[]]$Items,
+        [ValidateRange(0.50,1.00)][double]$RowOverlapThreshold = 0.80
+    )
+
+    $remaining = @($Items | Sort-Object Y, X)
+    $rows = @()
+
+    while ($remaining.Count -gt 0) {
+        # Top-most, then left-most visual is the primary anchor for this row.
+        $anchor = $remaining[0]
+        $rowItems = @()
+        $nextRemaining = @()
+
+        foreach ($item in $remaining) {
+            $ratio = Get-AlignmentVerticalContainmentRatio -Anchor $anchor -Candidate $item
+            if ($item.Id -eq $anchor.Id -or $ratio -ge $RowOverlapThreshold) {
+                $rowItems += $item
+            }
+            else {
+                $nextRemaining += $item
+            }
+        }
+
+        $rowItems = @($rowItems | Sort-Object X)
+        $baseHeight = [double](($rowItems | Measure-Object -Property Height -Maximum).Maximum)
+        if ($baseHeight -le 0) { $baseHeight = [double]$anchor.Height }
+
+        $rows += [pscustomobject]@{
+            Anchor = $anchor
+            Items = $rowItems
+            BaseHeight = $baseHeight
+        }
+
+        $remaining = @($nextRemaining | Sort-Object Y, X)
+    }
+
+    return @($rows)
+}
+
+function Get-RowPackPbiLayout {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]$Analysis,
         [ValidateRange(0,500)][double]$Margin = 5,
         [ValidateRange(0,500)][double]$Gap = 5,
-        [ValidateRange(0.50,1.00)][double]$RowOverlapThreshold = 0.80
+        [ValidateRange(0.50,1.00)][double]$RowOverlapThreshold = 0.80,
+        [ValidateRange(1.00,3.00)][double]$SmallRowGrowthCap = 1.40
     )
 
     $managed = @($Analysis.Items | Where-Object {
@@ -122,7 +150,7 @@ function Get-FirstRowPbiLayout {
     })
 
     if ($managed.Count -eq 0) {
-        throw 'No active visible visuals are available for first-row alignment.'
+        throw 'No active visible visuals are available for alignment.'
     }
 
     $contentLeft = if ([double]$Analysis.ReservedLeft -gt 0) { [double]$Analysis.ReservedLeft + $Gap } else { $Margin }
@@ -130,122 +158,102 @@ function Get-FirstRowPbiLayout {
     $contentRight = if ([double]$Analysis.ReservedRight -lt [double]$Analysis.PageWidth) { [double]$Analysis.ReservedRight - $Gap } else { [double]$Analysis.PageWidth - $Margin }
     $contentBottom = if ([double]$Analysis.ReservedBottom -lt [double]$Analysis.PageHeight) { [double]$Analysis.ReservedBottom - $Gap } else { [double]$Analysis.PageHeight - $Margin }
 
-    if ($contentRight -le $contentLeft -or $contentBottom -le $contentTop) {
+    $contentWidth = $contentRight - $contentLeft
+    $contentHeight = $contentBottom - $contentTop
+    if ($contentWidth -le 0 -or $contentHeight -le 0) {
         throw 'No usable page area remains after margin and protected regions are applied.'
     }
 
-    $anchor = @($managed | Sort-Object Y, X)[0]
+    $rows = @(Get-AlignmentRowGroups -Items $managed -RowOverlapThreshold $RowOverlapThreshold)
+    if ($rows.Count -eq 0) { throw 'No visual rows could be detected.' }
 
-    $rowItems = @()
-    foreach ($item in $managed) {
-        $ratio = Get-FirstRowVerticalOverlapRatio -Anchor $anchor -Candidate $item
-        if ($item.Id -eq $anchor.Id -or $ratio -ge $RowOverlapThreshold) {
-            $rowItems += $item
-        }
-    }
-    $rowItems = @($rowItems | Sort-Object X)
-
-    $rowIds = @{}
-    foreach ($item in $rowItems) { $rowIds[[string]$item.Id] = $true }
-
-    $nonRowItems = @($managed | Where-Object { -not $rowIds.ContainsKey([string]$_.Id) })
-
-    $rowStartX = [Math]::Max($contentLeft,[double]$anchor.X)
-    $rowY = [Math]::Max($contentTop,[double]$anchor.Y)
-    $availableWidth = $contentRight - $rowStartX
-    if ($availableWidth -le 0) { throw 'The first-row anchor is outside the usable page width.' }
-
-    $widths = @($rowItems | ForEach-Object { [double]$_.Width })
-    $originalWidthTotal = [double](($widths | Measure-Object -Sum).Sum)
-    $gapTotal = [Math]::Max(0,($rowItems.Count - 1)) * $Gap
-    $usableForVisuals = $availableWidth - $gapTotal
-
-    if ($usableForVisuals -le 0) {
-        throw 'Configured gap leaves no usable width for the detected first row.'
+    # --------------------------
+    # Vertical row sizing
+    # --------------------------
+    $verticalGapTotal = [Math]::Max(0,($rows.Count - 1)) * $Gap
+    $usableForRows = $contentHeight - $verticalGapTotal
+    if ($usableForRows -le 0) {
+        throw 'Configured gap leaves no usable height for detected rows.'
     }
 
-    $widthScaled = $false
+    $baseHeights = @($rows | ForEach-Object { [double]$_.BaseHeight })
+    $baseHeightTotal = [double](($baseHeights | Measure-Object -Sum).Sum)
+    if ($baseHeightTotal -le 0) { throw 'Detected rows do not have valid heights.' }
 
-    if ($rowItems.Count -eq 1) {
-        $coverage = [double]$anchor.Width / [Math]::Max(1.0,$availableWidth)
-        if ($coverage -ge 0.90) {
-            $widths = @($availableWidth)
-            $rowStartX = $contentLeft
-            $widthScaled = $true
-        }
-        elseif ([double]$anchor.Width -gt $availableWidth) {
-            $widths = @($availableWidth)
-            $widthScaled = $true
-        }
-    }
-    elseif ($originalWidthTotal -gt $usableForVisuals) {
-        $widthScaled = $true
-        $scaledWidths = @()
-        foreach ($width in $widths) {
-            $share = if ($originalWidthTotal -gt 0) { [double]$width / $originalWidthTotal } else { 1.0 / $rowItems.Count }
-            $scaledWidths += ($usableForVisuals * $share)
-        }
-        $widths = $scaledWidths
+    $requestedScale = $usableForRows / $baseHeightTotal
+    $cappedScale = if ($requestedScale -gt $SmallRowGrowthCap) { $SmallRowGrowthCap } else { $requestedScale }
+    $rowHeights = @()
+    foreach ($height in $baseHeights) {
+        $rowHeights += [Math]::Max(1.0,([double]$height * $cappedScale))
     }
 
+    # If the page is taller than the capped row stack, keep card-like rows
+    # capped and let the largest row/chart absorb the remaining space. This
+    # keeps the bottom margin exact without making every small card too tall.
+    $usedHeight = [double](($rowHeights | Measure-Object -Sum).Sum)
+    $remainingHeight = $usableForRows - $usedHeight
+    $largestRowIndex = 0
+    $largestBaseHeight = -1.0
+    for ($i = 0; $i -lt $baseHeights.Count; $i++) {
+        if ([double]$baseHeights[$i] -gt $largestBaseHeight) {
+            $largestBaseHeight = [double]$baseHeights[$i]
+            $largestRowIndex = $i
+        }
+    }
+    if ($remainingHeight -gt 0.001) {
+        $rowHeights[$largestRowIndex] = [double]$rowHeights[$largestRowIndex] + $remainingHeight
+    }
+
+    # --------------------------
+    # Horizontal row sizing
+    # --------------------------
+    # Every row fills exactly from left margin to right margin. The original
+    # width percentage of visuals inside that row is preserved; only the gap
+    # total is removed before proportional distribution.
     $proposed = @()
-    $cursorX = $rowStartX
-    $rowOverlapFixCount = 0
-    $obstaclePushCount = 0
+    $cursorY = $contentTop
+    $maxColumns = 0
 
-    for ($i = 0; $i -lt $rowItems.Count; $i++) {
-        $item = $rowItems[$i]
-        $targetWidth = [double]$widths[$i]
-        $targetX = $cursorX
+    for ($rowIndex = 0; $rowIndex -lt $rows.Count; $rowIndex++) {
+        $row = $rows[$rowIndex]
+        $rowItems = @($row.Items | Sort-Object X)
+        $maxColumns = [Math]::Max($maxColumns,$rowItems.Count)
 
-        if ($i -gt 0 -and [double]$item.X -lt ($targetX - 0.001)) {
-            $rowOverlapFixCount++
+        $horizontalGapTotal = [Math]::Max(0,($rowItems.Count - 1)) * $Gap
+        $usableForVisuals = $contentWidth - $horizontalGapTotal
+        if ($usableForVisuals -le 0) {
+            throw ('Configured gap leaves no usable width for row ' + ($rowIndex + 1) + '.')
         }
 
-        # Keep the first visual as the primary anchor. For every later row
-        # visual, if the desired position collides with an unchanged lower-row
-        # visual, push only this row visual to the obstacle's right edge + Gap.
-        if ($i -gt 0) {
-            for ($attempt = 0; $attempt -lt 20; $attempt++) {
-                $blockingRight = $null
+        $originalWidthTotal = [double](($rowItems | Measure-Object -Property Width -Sum).Sum)
+        if ($originalWidthTotal -le 0) {
+            throw ('Detected row ' + ($rowIndex + 1) + ' does not have valid widths.')
+        }
 
-                foreach ($obstacle in $nonRowItems) {
-                    if (Test-FirstRowRectOverlap -X $targetX -Y $rowY -Width $targetWidth -Height ([double]$item.Height) -Other $obstacle) {
-                        $candidateRight = [double]$obstacle.X + [double]$obstacle.Width + $Gap
-                        if ($null -eq $blockingRight -or $candidateRight -gt [double]$blockingRight) {
-                            $blockingRight = $candidateRight
-                        }
-                    }
-                }
+        $cursorX = $contentLeft
+        $rowHeight = [double]$rowHeights[$rowIndex]
 
-                if ($null -eq $blockingRight) { break }
-                if ([double]$blockingRight -le ($targetX + 0.001)) { break }
+        for ($columnIndex = 0; $columnIndex -lt $rowItems.Count; $columnIndex++) {
+            $item = $rowItems[$columnIndex]
+            $share = [double]$item.Width / $originalWidthTotal
+            $targetWidth = $usableForVisuals * $share
 
-                $targetX = [double]$blockingRight
-                $obstaclePushCount++
+            # Force the final visual to end exactly at the right content edge.
+            # This removes floating-point rounding and guarantees only Margin
+            # remains after the final visual.
+            if ($columnIndex -eq ($rowItems.Count - 1)) {
+                $targetWidth = $contentRight - $cursorX
             }
+
+            $proposed += New-AlignmentProposedItem -Item $item -X $cursorX -Y $cursorY -Width $targetWidth -Height $rowHeight -Column $columnIndex -Row $rowIndex
+            $cursorX += $targetWidth + $Gap
         }
 
-        # If obstacle pushing would exceed the right margin, fall back to the
-        # visual's current X when it is still inside the page. Validation will
-        # block Apply rather than silently create a bad layout.
-        if (($targetX + $targetWidth) -gt $contentRight) {
-            $originalX = [Math]::Max($contentLeft,[double]$item.X)
-            if (($originalX + $targetWidth) -le $contentRight) {
-                $targetX = $originalX
-            }
-        }
-
-        $proposed += New-FirstRowProposedItem -Item $item -X $targetX -Y $rowY -Width $targetWidth -Height ([double]$item.Height) -Column $i -Row 0
-        $cursorX = $targetX + $targetWidth + $Gap
-    }
-
-    foreach ($item in $nonRowItems) {
-        $proposed += New-FirstRowProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -Column ([int]$item.Column) -Row ([int]$item.Row)
+        $cursorY += $rowHeight + $Gap
     }
 
     foreach ($item in $locked) {
-        $proposed += New-FirstRowProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -IsLocked $true -Column 0 -Row 0
+        $proposed += New-AlignmentProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -IsLocked $true -Column 0 -Row 0
     }
 
     [pscustomobject]@{
@@ -257,14 +265,13 @@ function Get-FirstRowPbiLayout {
         ContentTop = [Math]::Round($contentTop,3)
         ContentRight = [Math]::Round($contentRight,3)
         ContentBottom = [Math]::Round($contentBottom,3)
-        Columns = $rowItems.Count
-        Rows = 1
-        LayoutStrategy = 'First Row Align'
-        FirstRowVisualCount = $rowItems.Count
+        Columns = $maxColumns
+        Rows = $rows.Count
+        LayoutStrategy = 'Row Pack Align'
+        FirstRowVisualCount = @($rows[0].Items).Count
         RowOverlapThreshold = $RowOverlapThreshold
-        RowOverlapFixCount = $rowOverlapFixCount
-        ObstaclePushCount = $obstaclePushCount
-        WidthScaledToFit = $widthScaled
+        SmallRowGrowthCap = $SmallRowGrowthCap
+        WidthScaledToFill = $true
         MaxAreaShareDeltaPercent = $null
         Items = $proposed
         ChangedCount = @($proposed | Where-Object { $_.Changed }).Count
@@ -298,6 +305,9 @@ function Invoke-AlignmentPreview {
         Actions = @()
     }
 
+    # Overlap pre-pass: use it only when it can fix the problem with one simple
+    # move and no resize. A cascade/compact rewrite is rejected because the row
+    # packer itself will cleanly rebuild the visible layout.
     try {
         $diagnostic = Resolve-PbiSnapshotOverlaps -PageSnapshot $PageSnapshot -InitialAnalysis $initialAnalysis -Margin $Margin -Gap $Gap
 
@@ -318,7 +328,7 @@ function Invoke-AlignmentPreview {
         else {
             $overlapNormalization = [pscustomobject]@{
                 Snapshot = $PageSnapshot
-                HadOverlaps = $false
+                HadOverlaps = [bool]$diagnostic.HadOverlaps
                 InitialOverlapPairCount = [int]$diagnostic.InitialOverlapPairCount
                 RemainingOverlapPairCount = [int]$diagnostic.RemainingOverlapPairCount
                 MovedCount = 0
@@ -331,10 +341,10 @@ function Invoke-AlignmentPreview {
         }
     }
     catch {
-        # Diagnostic failure must never block the interview-safe first-row pass.
+        # Diagnostic failure must never block the deterministic row-pack pass.
     }
 
-    $layout = Get-FirstRowPbiLayout -Analysis $analysis -Margin $Margin -Gap $Gap -RowOverlapThreshold 0.80
+    $layout = Get-RowPackPbiLayout -Analysis $analysis -Margin $Margin -Gap $Gap -RowOverlapThreshold 0.80 -SmallRowGrowthCap 1.40
     $validation = Test-PbiLayout -Layout $layout
 
     [pscustomobject]@{
