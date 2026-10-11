@@ -224,29 +224,15 @@ function Invoke-AlignmentPreview {
         [Parameter(Mandatory=$true)][double]$Gap
     )
 
-    $analysis = Get-PbiLayoutAnalysis -PageSnapshot $PageSnapshot `
+    $initialAnalysis = Get-PbiLayoutAnalysis -PageSnapshot $PageSnapshot `
         -MinimumTolerance ([double]$Config.layout.minimumTolerance) `
         -MaximumTolerance ([double]$Config.layout.maximumTolerance)
 
-    # Run the legacy resolver only as a source-overlap diagnostic so existing
-    # integration checks can still confirm overlap detection. Its moved/resized
-    # geometry is deliberately NOT fed into the demo layout.
-    $diagnosticPairs = 0
-    try {
-        $diagnostic = Resolve-PbiSnapshotOverlaps -PageSnapshot $PageSnapshot -InitialAnalysis $analysis -Margin $Margin -Gap $Gap
-        $diagnosticPairs = [int]$diagnostic.InitialOverlapPairCount
-    }
-    catch {
-        $diagnosticPairs = 0
-    }
-
-    $layout = Get-FirstRowPbiLayout -Analysis $analysis -Margin $Margin -Gap $Gap -RowOverlapThreshold 0.80
-    $validation = Test-PbiLayout -Layout $layout
-
+    $analysis = $initialAnalysis
     $overlapNormalization = [pscustomobject]@{
         Snapshot = $PageSnapshot
         HadOverlaps = $false
-        InitialOverlapPairCount = $diagnosticPairs
+        InitialOverlapPairCount = 0
         RemainingOverlapPairCount = 0
         MovedCount = 0
         ResizedCount = 0
@@ -256,8 +242,51 @@ function Invoke-AlignmentPreview {
         Actions = @()
     }
 
+    try {
+        $diagnostic = Resolve-PbiSnapshotOverlaps -PageSnapshot $PageSnapshot -InitialAnalysis $initialAnalysis -Margin $Margin -Gap $Gap
+
+        # Accept the resolver only when it is genuinely minimal: at most one
+        # visual moved, no visual resized, and no overlap remains. This keeps a
+        # simple source overlap fix while rejecting cascade cases such as one
+        # overlap causing 6 unrelated visuals to move.
+        $safeMinimalFix = (
+            [bool]$diagnostic.HadOverlaps -and
+            [int]$diagnostic.MovedCount -le 1 -and
+            [int]$diagnostic.ResizedCount -eq 0 -and
+            [int]$diagnostic.RemainingOverlapPairCount -eq 0 -and
+            -not [bool]$diagnostic.UsedCompactFallback
+        )
+
+        if ($safeMinimalFix) {
+            $analysis = Get-PbiLayoutAnalysis -PageSnapshot $diagnostic.Snapshot `
+                -MinimumTolerance ([double]$Config.layout.minimumTolerance) `
+                -MaximumTolerance ([double]$Config.layout.maximumTolerance)
+            $overlapNormalization = $diagnostic
+        }
+        else {
+            $overlapNormalization = [pscustomobject]@{
+                Snapshot = $PageSnapshot
+                HadOverlaps = $false
+                InitialOverlapPairCount = [int]$diagnostic.InitialOverlapPairCount
+                RemainingOverlapPairCount = [int]$diagnostic.RemainingOverlapPairCount
+                MovedCount = 0
+                ResizedCount = 0
+                Resolved = $true
+                UsedCompactFallback = $false
+                DiagnosticOnly = $true
+                Actions = @()
+            }
+        }
+    }
+    catch {
+        # Diagnostic failure must never block the interview-safe first-row pass.
+    }
+
+    $layout = Get-FirstRowPbiLayout -Analysis $analysis -Margin $Margin -Gap $Gap -RowOverlapThreshold 0.80
+    $validation = Test-PbiLayout -Layout $layout
+
     [pscustomobject]@{
-        InitialAnalysis = $analysis
+        InitialAnalysis = $initialAnalysis
         OverlapNormalization = $overlapNormalization
         Analysis = $analysis
         Layout = $layout
