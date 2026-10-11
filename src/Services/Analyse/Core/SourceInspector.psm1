@@ -93,7 +93,7 @@ function Get-PbiPowerQueryConnectionTargets {
         Add-PbiSourceTarget -List $result -Connector ('Navigation ' + $kind) -Target $name
     }
 
-    return @($result)
+    return [object[]]$result.ToArray()
 }
 
 function Format-PbiPowerQueryConnectionTargets {
