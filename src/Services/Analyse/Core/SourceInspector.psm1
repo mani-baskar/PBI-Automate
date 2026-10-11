@@ -24,7 +24,7 @@ function Protect-SourceTargetText {
 
 function Add-PbiSourceTarget {
     param(
-        [Parameter(Mandatory=$true)][System.Collections.Generic.List[object]]$List,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$List,
         [Parameter(Mandatory=$true)][string]$Connector,
         [Parameter(Mandatory=$true)][string]$Target
     )
