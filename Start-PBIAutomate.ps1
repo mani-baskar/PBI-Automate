@@ -18,6 +18,10 @@ $modules = @(
     'src\Services\Alignment\Core\AlignmentValidator.psm1',
     'src\Services\Alignment\Core\OverlapResolver.psm1',
     'src\Services\Alignment\AlignmentService.psm1',
+    'src\Services\Analyse\Core\SemanticModelDiscovery.psm1',
+    'src\Services\Analyse\Core\TmdlReader.psm1',
+    'src\Services\Analyse\Core\MarkdownWriter.psm1',
+    'src\Services\Analyse\AnalyseService.psm1',
     'src\UI\PreviewCanvas.psm1',
     'src\UI\MainForm.psm1'
 )
