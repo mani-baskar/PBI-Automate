@@ -42,6 +42,7 @@ $modulePaths = @(
     'src\Services\Alignment\AlignmentService.psm1',
     'src\Services\Analyse\Core\SemanticModelDiscovery.psm1',
     'src\Services\Analyse\Core\TmdlReader.psm1',
+    'src\Services\Analyse\Core\SourceInspector.psm1',
     'src\Services\Analyse\Core\MarkdownWriter.psm1',
     'src\Services\Analyse\AnalyseService.psm1',
     'src\UI\PreviewCanvas.psm1',
@@ -58,6 +59,12 @@ try {
         Assert-Analyse (@($parseErrors).Count -eq 0) ($relative + ' parses under Windows PowerShell 5.1')
         Import-Module $path -Force -ErrorAction Stop
     }
+
+    $startupPath = Join-Path $root 'Start-PBIAutomate.ps1'
+    $startupText = Get-Content -LiteralPath $startupPath -Raw -Encoding UTF8
+    Assert-Analyse ($startupText -notmatch 'Show-PBIAutomateMainForm\s+-RootPath\s+\$root\s+-BuildOnly') 'Desktop startup does not return MainForm before its event-handler scope completes'
+    Assert-Analyse ($startupText -match 'Show-PBIAutomateMainForm\s+-RootPath\s+\$root') 'Desktop startup keeps the normal modal MainForm lifecycle'
+    Assert-Analyse ($startupText -match 'Add-PbiAnalyseUi') 'Analyse UI is attached without replacing the MainForm lifecycle'
 
     $pbip = Join-Path $root 'PBI Demo\Demo 1.pbip'
     Assert-Analyse (Test-Path -LiteralPath $pbip -PathType Leaf) 'Checked-in PBIP Analyse fixture exists'
@@ -103,6 +110,8 @@ try {
     $relationshipMd = Get-Content -LiteralPath (Join-Path $export.OutputFolder 'Relationship\Relationships.md') -Raw -Encoding UTF8
     Assert-Analyse ($relationshipMd -match '```mermaid') 'Relationship Markdown contains a Mermaid flowchart'
 
+    # BuildOnly is valid for non-interactive UI structure tests. Production startup
+    # must never show this returned form outside Show-PBIAutomateMainForm's scope.
     $form = Show-PBIAutomateMainForm -RootPath $root -BuildOnly
     Add-PbiAnalyseUi -Form $form -RootPath $root | Out-Null
     Assert-Analyse ($null -ne (Find-TestControl -Parent $form -Name 'Service_analyse')) 'Analyse appears in service navigation'
