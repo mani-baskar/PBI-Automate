@@ -196,21 +196,40 @@ function Add-PbiAnalyseUi {
     $details.BackColor = [System.Drawing.Color]::FromArgb(248,250,252)
     $details.BorderStyle = 'FixedSingle'
     $details.Font = New-Object System.Drawing.Font('Consolas',9)
-    $details.Text = "Generated structure:`r`n  Analyse\README.md`r`n  Analyse\Table\<Table>.md`r`n  Analyse\Relationship\Relationships.md`r`n  Analyse\Pages\README.md`r`n`r`nLong SQL, Power Query and DAX logic is written inside collapsed <details> blocks."
+    $details.Text = "Generated structure:`r`n  Analyse\README.md`r`n  Analyse\Table\<Table>.md`r`n  Analyse\Relationship\Relationships.md`r`n  Analyse\Pages\README.md`r`n`r`nPower BI auto Date/Time tables are skipped. Long SQL, Power Query and DAX logic is written inside collapsed <details> blocks."
     $contentGrid.Controls.Add($details,0,5)
 
-    $lastAutoOutput = ''
-    $lastGeneratedFolder = ''
+    # Mutable state object is used because event scriptblocks execute in child
+    # scopes. Assigning simple local variables inside those handlers does not
+    # reliably persist between Generate Markdown and Open Analyse clicks.
+    $analyseState = [pscustomobject]@{
+        LastAutoOutput = ''
+        LastGeneratedFolder = ''
+    }
+
+    $refreshOpenState = {
+        $existing = ''
+        try { $existing = Get-PbiAnalyseExistingOutputFolder -OutputRoot ([string]$outputText.Text) } catch { $existing = '' }
+        if (-not [string]::IsNullOrWhiteSpace($existing)) {
+            $analyseState.LastGeneratedFolder = $existing
+            $openButton.Enabled = $true
+        }
+        else {
+            $analyseState.LastGeneratedFolder = ''
+            $openButton.Enabled = $false
+        }
+    }.GetNewClosure()
 
     $setDefaultOutput = {
         $newDefault = ''
         try { $newDefault = Get-PbiAnalyseDefaultOutputRoot -ProjectPath ([string]$projectText.Text) } catch { $newDefault = '' }
         if (-not [string]::IsNullOrWhiteSpace($newDefault)) {
-            if ([string]::IsNullOrWhiteSpace($outputText.Text) -or $outputText.Text -eq $lastAutoOutput) {
+            if ([string]::IsNullOrWhiteSpace($outputText.Text) -or $outputText.Text -eq $analyseState.LastAutoOutput) {
                 $outputText.Text = $newDefault
             }
-            $lastAutoOutput = $newDefault
+            $analyseState.LastAutoOutput = $newDefault
         }
+        & $refreshOpenState
     }.GetNewClosure()
 
     $scanModel = {
@@ -223,9 +242,11 @@ function Add-PbiAnalyseUi {
             $countSummary.Text = ('Tables: ' + $info.TableFileCount + '     Relationships: ' + $info.RelationshipCount + '     Pages: ' + $info.PageCount)
             $details.Text = ('Detection: ' + $info.SemanticModel.DetectionMethod + [Environment]::NewLine +
                 'TMDL Definition: ' + $info.SemanticModel.DefinitionFolder + [Environment]::NewLine +
+                'Power BI auto date tables skipped: ' + $info.SkippedSystemTableCount + [Environment]::NewLine +
+                'Auto-date relationships skipped: ' + $info.SkippedSystemRelationshipCount + [Environment]::NewLine +
                 'Output Root: ' + $outputText.Text + [Environment]::NewLine + [Environment]::NewLine +
                 'Ready to generate Markdown documentation.')
-            & $writeActivity ('Analyse scan: tables=' + $info.TableFileCount + '; relationships=' + $info.RelationshipCount + '; pages=' + $info.PageCount)
+            & $writeActivity ('Analyse scan: tables=' + $info.TableFileCount + '; skipped system tables=' + $info.SkippedSystemTableCount + '; relationships=' + $info.RelationshipCount + '; pages=' + $info.PageCount)
         }
         catch { & $showError $_.Exception.Message }
     }.GetNewClosure()
@@ -237,13 +258,15 @@ function Add-PbiAnalyseUi {
             if ([string]::IsNullOrWhiteSpace($outputText.Text)) { throw 'Choose an output folder.' }
             & $writeActivity 'Analyse: generating Markdown documentation...'
             $result = Invoke-PbiAnalyseExport -ProjectPath ([string]$projectText.Text) -OutputRoot ([string]$outputText.Text)
-            $lastGeneratedFolder = [string]$result.OutputFolder
+            $analyseState.LastGeneratedFolder = [string]$result.OutputFolder
             $openButton.Enabled = $true
             $modelSummary.Text = ('Semantic Model: ' + $result.SemanticModelFolder)
             $countSummary.Text = ('Tables: ' + $result.TableCount + '     Relationships: ' + $result.RelationshipCount + '     Pages: ' + $result.PageCount + '     Native SQL tables: ' + $result.NativeSqlTableCount)
             $outputSummary.Text = ('Output: ' + $result.OutputFolder)
             $sourceText = if (@($result.SourceCalls).Count -gt 0) { @($result.SourceCalls) -join ', ' } else { 'No connector call detected / calculated model' }
             $details.Text = ('Generated successfully.' + [Environment]::NewLine +
+                'Power BI auto date tables skipped: ' + $result.SkippedSystemTableCount + [Environment]::NewLine +
+                'Auto-date relationships skipped: ' + $result.SkippedSystemRelationshipCount + [Environment]::NewLine +
                 'Sources: ' + $sourceText + [Environment]::NewLine +
                 'Table docs: ' + (Join-Path $result.OutputFolder 'Table') + [Environment]::NewLine +
                 'Relationships: ' + (Join-Path $result.OutputFolder 'Relationship\Relationships.md') + [Environment]::NewLine +
@@ -260,7 +283,9 @@ function Add-PbiAnalyseUi {
         if (Test-Path -LiteralPath $outputText.Text -PathType Container) { $dialog.SelectedPath = $outputText.Text }
         if ($dialog.ShowDialog($Form) -eq [System.Windows.Forms.DialogResult]::OK) {
             $outputText.Text = $dialog.SelectedPath
-            $lastAutoOutput = ''
+            $analyseState.LastAutoOutput = ''
+            $analyseState.LastGeneratedFolder = ''
+            & $refreshOpenState
         }
         $dialog.Dispose()
     }.GetNewClosure())
@@ -268,12 +293,18 @@ function Add-PbiAnalyseUi {
     $generateButton.Add_Click({ & $generate }.GetNewClosure())
     $openButton.Add_Click({
         try {
-            if ([string]::IsNullOrWhiteSpace($lastGeneratedFolder) -or -not (Test-Path -LiteralPath $lastGeneratedFolder -PathType Container)) { throw 'Generate Analyse documentation first.' }
-            Start-Process explorer.exe -ArgumentList ('"' + $lastGeneratedFolder + '"')
+            $folder = [string]$analyseState.LastGeneratedFolder
+            if ([string]::IsNullOrWhiteSpace($folder) -or -not (Test-Path -LiteralPath $folder -PathType Container)) {
+                $folder = Get-PbiAnalyseExistingOutputFolder -OutputRoot ([string]$outputText.Text)
+                if (-not [string]::IsNullOrWhiteSpace($folder)) { $analyseState.LastGeneratedFolder = $folder }
+            }
+            if ([string]::IsNullOrWhiteSpace($folder) -or -not (Test-Path -LiteralPath $folder -PathType Container)) { throw 'Generate Analyse documentation first.' }
+            Start-Process explorer.exe -ArgumentList ('"' + $folder + '"')
         }
         catch { & $showError $_.Exception.Message }
     }.GetNewClosure())
     $projectText.Add_TextChanged({ & $setDefaultOutput }.GetNewClosure())
+    $outputText.Add_TextChanged({ & $refreshOpenState }.GetNewClosure())
 
     $hideAnalyse = {
         $analyseOptions.Visible = $false
