@@ -4,9 +4,11 @@ function ConvertTo-AnalyseSafeFileName {
     param([Parameter(Mandatory=$true)][string]$Name)
 
     $safe = $Name
-    foreach ($char in [System.IO.Path]::GetInvalidFileNameChars()) { $safe = $safe.Replace([string]$char,'_') }
+    foreach ($char in [System.IO.Path]::GetInvalidFileNameChars()) {
+        $safe = $safe.Replace([string]$char,'_')
+    }
     $safe = $safe.Trim().TrimEnd('.')
-    if ([string]::IsNullOrWhiteSpace($safe)) { $safe = 'Unnamed' }
+    if ([string]::IsNullOrWhiteSpace($safe)) { return 'Unnamed' }
     return $safe
 }
 
@@ -15,11 +17,9 @@ function Protect-AnalyseText {
 
     if ($null -eq $Text) { return '' }
     $safe = [string]$Text
-
-    # Redact common credential fields without hiding ordinary model columns such as CustomerKey.
     $safe = [regex]::Replace($safe,'(?i)(Password|Pwd|AccessToken|RefreshToken|Token|ClientSecret|ApiKey|Api_Key|Credential)\s*=\s*"(?:[^"]|"")*"','$1="<redacted>"')
     $safe = [regex]::Replace($safe,'(?i)(Password|Pwd|AccessToken|RefreshToken|Token|ClientSecret|ApiKey|Api_Key|Credential)\s*=\s*([^;,\]\}\r\n]+)','$1=<redacted>')
-    $safe = [regex]::Replace($safe,'(?i)([?&](?:access_token|token|api_key|apikey|sig|client_secret)=)[^&\s"'']+','$1<redacted>')
+    $safe = [regex]::Replace($safe,"(?i)([?&](?:access_token|token|api_key|apikey|sig|client_secret)=)[^&\s\"']+",'$1<redacted>')
     return $safe
 }
 
@@ -66,13 +66,14 @@ function Get-TableSourceTypeSummary {
 
     $calls = @()
     foreach ($partition in @($Table.Partitions)) {
-        foreach ($call in @($partition.SourceCalls)) { if ($calls -notcontains $call) { $calls += $call } }
+        foreach ($call in @($partition.SourceCalls)) {
+            if ($calls -notcontains $call) { $calls += $call }
+        }
     }
-    if ($calls.Count -eq 0) {
-        if (@($Table.Partitions | Where-Object { $_.Type -eq 'calculated' }).Count -gt 0) { return 'DAX calculated table' }
-        return 'No connector call detected'
-    }
-    return ($calls -join ', ')
+
+    if ($calls.Count -gt 0) { return ($calls -join ', ') }
+    if (@($Table.Partitions | Where-Object { $_.Type -eq 'calculated' }).Count -gt 0) { return 'DAX calculated table' }
+    return 'No connector call detected'
 }
 
 function New-PbiTableMarkdown {
@@ -84,9 +85,10 @@ function New-PbiTableMarkdown {
 
     $sb = New-Object System.Text.StringBuilder
     $calculatedColumns = @($Table.Columns | Where-Object { $_.IsCalculated })
-    $physicalColumns = @($Table.Columns | Where-Object { -not $_.IsCalculated })
-    $nativeSqlPartitions = @($Table.Partitions | Where-Object { $_.NativeSqlDetected })
+    $nativePartitions = @($Table.Partitions | Where-Object { $_.NativeSqlDetected })
     $sourceType = Get-TableSourceTypeSummary -Table $Table
+    $nativeLabel = 'No'
+    if ($nativePartitions.Count -gt 0) { $nativeLabel = 'Yes' }
 
     [void]$sb.AppendLine(('# Table: ' + $Table.Name))
     [void]$sb.AppendLine('')
@@ -102,47 +104,53 @@ function New-PbiTableMarkdown {
     [void]$sb.AppendLine(('| Calculated columns | ' + $calculatedColumns.Count + ' |'))
     [void]$sb.AppendLine(('| Measures | ' + $Table.Measures.Count + ' |'))
     [void]$sb.AppendLine(('| Partitions | ' + $Table.Partitions.Count + ' |'))
-    [void]$sb.AppendLine(('| Native SQL detected | ' + $(if ($nativeSqlPartitions.Count -gt 0) { 'Yes' } else { 'No' }) + ' |'))
+    [void]$sb.AppendLine(('| Native SQL detected | ' + $nativeLabel + ' |'))
     [void]$sb.AppendLine('')
 
     [void]$sb.AppendLine('## Data Source & Power Query')
     [void]$sb.AppendLine('')
+
     if ($Table.Partitions.Count -eq 0) {
         [void]$sb.AppendLine('_No partition definition was found in this table file._')
         [void]$sb.AppendLine('')
     }
-    else {
-        foreach ($partition in @($Table.Partitions)) {
-            [void]$sb.AppendLine(('### Partition: ' + $partition.Name))
+
+    foreach ($partition in @($Table.Partitions)) {
+        [void]$sb.AppendLine(('### Partition: ' + $partition.Name))
+        [void]$sb.AppendLine('')
+        [void]$sb.AppendLine('| Property | Value |')
+        [void]$sb.AppendLine('|---|---|')
+        [void]$sb.AppendLine(('| Type | ' + (ConvertTo-MarkdownCell $partition.Type) + ' |'))
+        [void]$sb.AppendLine(('| Mode | ' + (ConvertTo-MarkdownCell $partition.Mode) + ' |'))
+        [void]$sb.AppendLine(('| Connector / source calls | ' + (ConvertTo-MarkdownCell (@($partition.SourceCalls) -join ', ')) + ' |'))
+        $partitionNative = 'No'
+        if ($partition.NativeSqlDetected) { $partitionNative = 'Yes' }
+        [void]$sb.AppendLine(('| Native SQL | ' + $partitionNative + ' |'))
+        [void]$sb.AppendLine('')
+
+        if (@($partition.PowerQuerySteps).Count -gt 0) {
+            $stepText = (@($partition.PowerQuerySteps) | ForEach-Object { '`' + $_ + '`' }) -join ' -> '
+            [void]$sb.AppendLine(('**Power Query steps:** ' + $stepText))
             [void]$sb.AppendLine('')
-            [void]$sb.AppendLine('| Property | Value |')
-            [void]$sb.AppendLine('|---|---|')
-            [void]$sb.AppendLine(('| Type | ' + (ConvertTo-MarkdownCell $partition.Type) + ' |'))
-            [void]$sb.AppendLine(('| Mode | ' + (ConvertTo-MarkdownCell $partition.Mode) + ' |'))
-            [void]$sb.AppendLine(('| Connector / source calls | ' + (ConvertTo-MarkdownCell (@($partition.SourceCalls) -join ', ')) + ' |'))
-            [void]$sb.AppendLine(('| Native SQL | ' + $(if ($partition.NativeSqlDetected) { 'Yes' } else { 'No' }) + ' |'))
+        }
+
+        $queryIndex = 1
+        foreach ($query in @($partition.NativeSqlQueries)) {
+            Add-MarkdownDetails -Builder $sb -Summary ('Native SQL Query ' + $queryIndex) -Content ([string]$query) -Language 'sql'
+            $queryIndex++
+        }
+
+        if ($partition.NativeSqlDetected -and @($partition.NativeSqlQueries).Count -eq 0) {
+            [void]$sb.AppendLine('> Native SQL usage was detected, but the SQL text could not be safely isolated. Expand Power Query M below to inspect the complete source expression.')
             [void]$sb.AppendLine('')
+        }
 
-            if (@($partition.PowerQuerySteps).Count -gt 0) {
-                [void]$sb.AppendLine('**Power Query steps:** ' + ((@($partition.PowerQuerySteps) | ForEach-Object { '`' + $_ + '`' }) -join ' → '))
-                [void]$sb.AppendLine('')
+        if (-not [string]::IsNullOrWhiteSpace([string]$partition.Source)) {
+            if ($partition.Type -eq 'calculated') {
+                Add-MarkdownDetails -Builder $sb -Summary 'Calculated Table DAX' -Content ([string]$partition.Source) -Language 'dax'
             }
-
-            $queryIndex = 1
-            foreach ($query in @($partition.NativeSqlQueries)) {
-                Add-MarkdownDetails -Builder $sb -Summary ('Native SQL Query ' + $queryIndex) -Content $query -Language 'sql'
-                $queryIndex++
-            }
-
-            if ($partition.NativeSqlDetected -and @($partition.NativeSqlQueries).Count -eq 0) {
-                [void]$sb.AppendLine('> Native SQL usage was detected, but the SQL text could not be safely isolated. Expand the Power Query M block below to inspect the complete source expression.')
-                [void]$sb.AppendLine('')
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace([string]$partition.Source)) {
-                $language = if ($partition.Type -eq 'calculated') { 'dax' } else { 'powerquery' }
-                $summary = if ($partition.Type -eq 'calculated') { 'Calculated Table DAX' } else { 'Power Query (M)' }
-                Add-MarkdownDetails -Builder $sb -Summary $summary -Content ([string]$partition.Source) -Language $language
+            else {
+                Add-MarkdownDetails -Builder $sb -Summary 'Power Query (M)' -Content ([string]$partition.Source) -Language 'powerquery'
             }
         }
     }
@@ -150,12 +158,17 @@ function New-PbiTableMarkdown {
     $referencedExpressions = @()
     foreach ($expression in @($SharedExpressions)) {
         foreach ($partition in @($Table.Partitions)) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$partition.Source) -and [string]$partition.Source -match ('(?<![A-Za-z0-9_])' + [regex]::Escape([string]$expression.Name) + '(?![A-Za-z0-9_])')) {
-                $referencedExpressions += $expression
-                break
+            $sourceText = [string]$partition.Source
+            if (-not [string]::IsNullOrWhiteSpace($sourceText)) {
+                $pattern = '(?<![A-Za-z0-9_])' + [regex]::Escape([string]$expression.Name) + '(?![A-Za-z0-9_])'
+                if ($sourceText -match $pattern) {
+                    $referencedExpressions += $expression
+                    break
+                }
             }
         }
     }
+
     if ($referencedExpressions.Count -gt 0) {
         [void]$sb.AppendLine('## Referenced Power Query Expressions / Parameters')
         [void]$sb.AppendLine('')
@@ -169,7 +182,8 @@ function New-PbiTableMarkdown {
     [void]$sb.AppendLine('| Column | Type | Source column | Summarize by | Hidden | Calculated |')
     [void]$sb.AppendLine('|---|---|---|---|---|---|')
     foreach ($column in @($Table.Columns)) {
-        [void]$sb.AppendLine(('| ' + (ConvertTo-MarkdownCell $column.Name) + ' | ' + (ConvertTo-MarkdownCell $column.DataType) + ' | ' + (ConvertTo-MarkdownCell $column.SourceColumn) + ' | ' + (ConvertTo-MarkdownCell $column.SummarizeBy) + ' | ' + [string]$column.IsHidden + ' | ' + [string]$column.IsCalculated + ' |'))
+        $line = '| ' + (ConvertTo-MarkdownCell $column.Name) + ' | ' + (ConvertTo-MarkdownCell $column.DataType) + ' | ' + (ConvertTo-MarkdownCell $column.SourceColumn) + ' | ' + (ConvertTo-MarkdownCell $column.SummarizeBy) + ' | ' + [string]$column.IsHidden + ' | ' + [string]$column.IsCalculated + ' |'
+        [void]$sb.AppendLine($line)
     }
     [void]$sb.AppendLine('')
 
@@ -191,7 +205,8 @@ function New-PbiTableMarkdown {
         [void]$sb.AppendLine('| Measure | Display folder | Format |')
         [void]$sb.AppendLine('|---|---|---|')
         foreach ($measure in @($Table.Measures)) {
-            [void]$sb.AppendLine(('| ' + (ConvertTo-MarkdownCell $measure.Name) + ' | ' + (ConvertTo-MarkdownCell $measure.DisplayFolder) + ' | ' + (ConvertTo-MarkdownCell $measure.FormatString) + ' |'))
+            $line = '| ' + (ConvertTo-MarkdownCell $measure.Name) + ' | ' + (ConvertTo-MarkdownCell $measure.DisplayFolder) + ' | ' + (ConvertTo-MarkdownCell $measure.FormatString) + ' |'
+            [void]$sb.AppendLine($line)
         }
         [void]$sb.AppendLine('')
         foreach ($measure in @($Table.Measures)) {
@@ -202,7 +217,9 @@ function New-PbiTableMarkdown {
     if ($Table.Hierarchies.Count -gt 0) {
         [void]$sb.AppendLine('## Hierarchies')
         [void]$sb.AppendLine('')
-        foreach ($hierarchy in @($Table.Hierarchies)) { [void]$sb.AppendLine(('- ' + $hierarchy.Name)) }
+        foreach ($hierarchy in @($Table.Hierarchies)) {
+            [void]$sb.AppendLine(('- ' + $hierarchy.Name))
+        }
         [void]$sb.AppendLine('')
     }
 
@@ -230,8 +247,11 @@ function New-PbiRelationshipsMarkdown {
         if ($tables -notcontains $rel.FromTable) { $tables += $rel.FromTable }
         if ($tables -notcontains $rel.ToTable) { $tables += $rel.ToTable }
     }
+
     $nodeIds = @{}
-    for ($i=0; $i -lt $tables.Count; $i++) { $nodeIds[[string]$tables[$i]] = ('T' + ($i+1)) }
+    for ($i=0; $i -lt $tables.Count; $i++) {
+        $nodeIds[[string]$tables[$i]] = 'T' + ($i + 1)
+    }
 
     [void]$sb.AppendLine('## Relationship Flow')
     [void]$sb.AppendLine('')
@@ -243,8 +263,8 @@ function New-PbiRelationshipsMarkdown {
     }
     foreach ($rel in @($Relationships)) {
         $edge = '-->'
-        if ([string]$rel.IsActive -match '^(false|False)') { $edge = '-.->' }
-        $edgeLabel = (([string]$rel.FromColumn) + ' → ' + ([string]$rel.ToColumn)).Replace('"',"'")
+        if ([string]$rel.IsActive -match '^false') { $edge = '-.->' }
+        $edgeLabel = (([string]$rel.FromColumn) + ' -> ' + ([string]$rel.ToColumn)).Replace('"',"'")
         [void]$sb.AppendLine(('  ' + $nodeIds[[string]$rel.FromTable] + ' ' + $edge + '|"' + $edgeLabel + '"| ' + $nodeIds[[string]$rel.ToTable]))
     }
     [void]$sb.AppendLine('```')
@@ -255,29 +275,31 @@ function New-PbiRelationshipsMarkdown {
     [void]$sb.AppendLine('| From | To | Cardinality | Cross filter | Active |')
     [void]$sb.AppendLine('|---|---|---|---|---|')
     foreach ($rel in @($Relationships)) {
-        $from = $rel.FromTable + '[' + $rel.FromColumn + ']'
-        $to = $rel.ToTable + '[' + $rel.ToColumn + ']'
-        $cardinality = $rel.FromCardinality + ' → ' + $rel.ToCardinality
-        [void]$sb.AppendLine(('| ' + (ConvertTo-MarkdownCell $from) + ' | ' + (ConvertTo-MarkdownCell $to) + ' | ' + (ConvertTo-MarkdownCell $cardinality) + ' | ' + (ConvertTo-MarkdownCell $rel.CrossFilteringBehavior) + ' | ' + (ConvertTo-MarkdownCell $rel.IsActive) + ' |'))
+        $fromText = $rel.FromTable + '[' + $rel.FromColumn + ']'
+        $toText = $rel.ToTable + '[' + $rel.ToColumn + ']'
+        $cardinality = $rel.FromCardinality + ' -> ' + $rel.ToCardinality
+        $line = '| ' + (ConvertTo-MarkdownCell $fromText) + ' | ' + (ConvertTo-MarkdownCell $toText) + ' | ' + (ConvertTo-MarkdownCell $cardinality) + ' | ' + (ConvertTo-MarkdownCell $rel.CrossFilteringBehavior) + ' | ' + (ConvertTo-MarkdownCell $rel.IsActive) + ' |'
+        [void]$sb.AppendLine($line)
     }
     [void]$sb.AppendLine('')
 
     foreach ($rel in @($Relationships)) {
-        $summary = $rel.FromTable + '[' + $rel.FromColumn + '] → ' + $rel.ToTable + '[' + $rel.ToColumn + ']'
-        $detail = @(
-            'Relationship ID: ' + $rel.Name,
-            'From cardinality: ' + $rel.FromCardinality,
-            'To cardinality: ' + $rel.ToCardinality,
-            'Cross filtering: ' + $rel.CrossFilteringBehavior,
-            'Active: ' + $rel.IsActive,
-            'Security filtering: ' + $rel.SecurityFilteringBehavior,
-            'Join on date behavior: ' + $rel.JoinOnDateBehavior,
-            '',
-            'Raw TMDL:',
-            $rel.Raw
-        ) -join [Environment]::NewLine
-        Add-MarkdownDetails -Builder $sb -Summary $summary -Content $detail -Language 'text'
+        $summary = $rel.FromTable + '[' + $rel.FromColumn + '] -> ' + $rel.ToTable + '[' + $rel.ToColumn + ']'
+        $detailLines = New-Object System.Collections.Generic.List[string]
+        [void]$detailLines.Add(('Relationship ID: ' + $rel.Name))
+        [void]$detailLines.Add(('From cardinality: ' + $rel.FromCardinality))
+        [void]$detailLines.Add(('To cardinality: ' + $rel.ToCardinality))
+        [void]$detailLines.Add(('Cross filtering: ' + $rel.CrossFilteringBehavior))
+        [void]$detailLines.Add(('Active: ' + $rel.IsActive))
+        [void]$detailLines.Add(('Security filtering: ' + $rel.SecurityFilteringBehavior))
+        [void]$detailLines.Add(('Join on date behavior: ' + $rel.JoinOnDateBehavior))
+        [void]$detailLines.Add('')
+        [void]$detailLines.Add('Raw TMDL:')
+        [void]$detailLines.Add([string]$rel.Raw)
+        $detailText = $detailLines -join [Environment]::NewLine
+        Add-MarkdownDetails -Builder $sb -Summary $summary -Content $detailText -Language 'text'
     }
+
     return $sb.ToString()
 }
 
@@ -294,7 +316,8 @@ function New-PbiPagesMarkdown {
     [void]$sb.AppendLine('|---|---:|---:|---:|---:|---:|')
     foreach ($page in @($Pages)) {
         $size = ([int]$page.Width).ToString() + ' x ' + ([int]$page.Height).ToString()
-        [void]$sb.AppendLine(('| ' + (ConvertTo-MarkdownCell $page.DisplayName) + ' | ' + $size + ' | ' + $page.TotalVisuals + ' | ' + $page.ActiveVisuals + ' | ' + $page.HiddenVisuals + ' | ' + $page.GroupContainers + ' |'))
+        $line = '| ' + (ConvertTo-MarkdownCell $page.DisplayName) + ' | ' + $size + ' | ' + $page.TotalVisuals + ' | ' + $page.ActiveVisuals + ' | ' + $page.HiddenVisuals + ' | ' + $page.GroupContainers + ' |'
+        [void]$sb.AppendLine($line)
     }
     [void]$sb.AppendLine('')
     return $sb.ToString()
@@ -343,10 +366,13 @@ function New-PbiTableIndexMarkdown {
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine('| Table | Source | Columns | Measures | Native SQL |')
     [void]$sb.AppendLine('|---|---|---:|---:|---|')
+
     foreach ($table in @($Tables | Sort-Object Name)) {
-        $file = ConvertTo-AnalyseSafeFileName ([string]$table.Name)
-        $native = @($table.Partitions | Where-Object { $_.NativeSqlDetected }).Count -gt 0
-        [void]$sb.AppendLine(('| [' + (ConvertTo-MarkdownCell $table.Name) + '](' + $file + '.md) | ' + (ConvertTo-MarkdownCell (Get-TableSourceTypeSummary -Table $table)) + ' | ' + $table.Columns.Count + ' | ' + $table.Measures.Count + ' | ' + $(if ($native) { 'Yes' } else { 'No' }) + ' |'))
+        $file = ConvertTo-AnalyseSafeFileName -Name ([string]$table.Name)
+        $nativeLabel = 'No'
+        if (@($table.Partitions | Where-Object { $_.NativeSqlDetected }).Count -gt 0) { $nativeLabel = 'Yes' }
+        $line = '| [' + (ConvertTo-MarkdownCell $table.Name) + '](' + $file + '.md) | ' + (ConvertTo-MarkdownCell (Get-TableSourceTypeSummary -Table $table)) + ' | ' + $table.Columns.Count + ' | ' + $table.Measures.Count + ' | ' + $nativeLabel + ' |'
+        [void]$sb.AppendLine($line)
     }
     [void]$sb.AppendLine('')
     return $sb.ToString()
