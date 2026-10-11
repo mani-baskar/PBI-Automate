@@ -60,6 +60,39 @@ function Get-PbiAnalysePageSummaries {
     return @($result)
 }
 
+function Add-PbiConnectionTargetsToMarkdown {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Markdown,
+        [Parameter(Mandatory=$true)]$Table
+    )
+
+    $rows = New-Object System.Collections.Generic.List[string]
+    foreach ($partition in @($Table.Partitions)) {
+        foreach ($target in @(Get-PbiPowerQueryConnectionTargets -Text ([string]$partition.Source))) {
+            $connector = ([string]$target.Connector).Replace('|','\|')
+            $targetText = ([string]$target.Target).Replace('|','\|').Replace("`r",' ').Replace("`n",' ')
+            [void]$rows.Add('| ' + $partition.Name + ' | ' + $connector + ' | ' + $targetText + ' |')
+        }
+    }
+
+    if ($rows.Count -eq 0) { return $Markdown }
+
+    $section = New-Object System.Text.StringBuilder
+    [void]$section.AppendLine('## Connection Targets')
+    [void]$section.AppendLine('')
+    [void]$section.AppendLine('| Partition | Connector | Target |')
+    [void]$section.AppendLine('|---|---|---|')
+    foreach ($row in $rows) { [void]$section.AppendLine($row) }
+    [void]$section.AppendLine('')
+
+    $marker = '## Data Source & Power Query'
+    if ($Markdown.Contains($marker)) {
+        return $Markdown.Replace($marker,($section.ToString() + $marker))
+    }
+    return ($Markdown + [Environment]::NewLine + $section.ToString())
+}
+
 function Invoke-PbiAnalyseExport {
     [CmdletBinding()]
     param(
@@ -92,6 +125,7 @@ function Invoke-PbiAnalyseExport {
             $tables += $table
             $safeName = ConvertTo-AnalyseSafeFileName -Name ([string]$table.Name)
             $markdown = New-PbiTableMarkdown -Table $table -SharedExpressions $sharedExpressions
+            $markdown = Add-PbiConnectionTargetsToMarkdown -Markdown $markdown -Table $table
             Write-AnalyseUtf8File -Path (Join-Path $tableOutput ($safeName + '.md')) -Content $markdown
         }
         catch {
