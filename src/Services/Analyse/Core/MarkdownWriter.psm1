@@ -81,7 +81,7 @@ function New-PbiTableMarkdown {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]$Table,
-        [object[]]$SharedExpressions = @()
+        [AllowEmptyCollection()][object[]]$SharedExpressions = @()
     )
 
     $sb = New-Object System.Text.StringBuilder
@@ -230,7 +230,7 @@ function New-PbiTableMarkdown {
 
 function New-PbiRelationshipsMarkdown {
     [CmdletBinding()]
-    param([object[]]$Relationships)
+    param([AllowEmptyCollection()][object[]]$Relationships = @())
 
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('# Semantic Model Relationships')
@@ -306,7 +306,7 @@ function New-PbiRelationshipsMarkdown {
 
 function New-PbiPagesMarkdown {
     [CmdletBinding()]
-    param([object[]]$Pages)
+    param([AllowEmptyCollection()][object[]]$Pages = @())
 
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('# Report Pages')
@@ -329,9 +329,9 @@ function New-PbiAnalyseIndexMarkdown {
     param(
         [Parameter(Mandatory=$true)]$Project,
         [Parameter(Mandatory=$true)]$SemanticModel,
-        [Parameter(Mandatory=$true)][object[]]$Tables,
-        [Parameter(Mandatory=$true)][object[]]$Relationships,
-        [Parameter(Mandatory=$true)][object[]]$Pages
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Tables,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Relationships,
+        [Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Pages
     )
 
     $sb = New-Object System.Text.StringBuilder
@@ -360,7 +360,7 @@ function New-PbiAnalyseIndexMarkdown {
 
 function New-PbiTableIndexMarkdown {
     [CmdletBinding()]
-    param([Parameter(Mandatory=$true)][object[]]$Tables)
+    param([Parameter(Mandatory=$true)][AllowEmptyCollection()][object[]]$Tables)
 
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('# Tables')
