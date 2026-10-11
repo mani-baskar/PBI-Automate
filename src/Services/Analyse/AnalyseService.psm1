@@ -67,6 +67,10 @@ function Add-PbiConnectionTargetsToMarkdown {
         [Parameter(Mandatory=$true)]$Table
     )
 
+    if ($null -eq (Get-Command -Name Get-PbiPowerQueryConnectionTargets -ErrorAction SilentlyContinue)) {
+        return $Markdown
+    }
+
     $rows = New-Object System.Collections.Generic.List[string]
     foreach ($partition in @($Table.Partitions)) {
         foreach ($target in @(Get-PbiPowerQueryConnectionTargets -Text ([string]$partition.Source))) {
