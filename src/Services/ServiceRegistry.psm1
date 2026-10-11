@@ -12,6 +12,12 @@ function Get-PBIAutomateServices {
             Description = 'Analyze, align, resize, validate and safely apply PBIR visual layout corrections.'
         },
         [pscustomobject]@{
+            Id = 'analyse'
+            Name = 'Analyse'
+            Status = 'Ready'
+            Description = 'Document semantic-model tables, sources, Power Query, DAX, relationships and report pages.'
+        },
+        [pscustomobject]@{
             Id = 'formatting'
             Name = 'Change Format'
             Status = 'Coming Soon'
