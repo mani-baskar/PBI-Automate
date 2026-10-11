@@ -118,7 +118,8 @@ try {
     Assert-Analyse ($financialMd -match 'Excel\.Workbook') 'Table Markdown exposes detected source connector'
 
     $relationshipMd = Get-Content -LiteralPath (Join-Path $export.OutputFolder 'Relationship\Relationships.md') -Raw -Encoding UTF8
-    Assert-Analyse ($relationshipMd -match '```mermaid') 'Relationship Markdown contains a Mermaid flowchart'
+    Assert-Analyse ($relationshipMd -match 'Relationships: \*\*0\*\*') 'Auto-date-only relationships are removed from generated relationship documentation'
+    Assert-Analyse ($relationshipMd -notmatch 'LocalDateTable_|DateTableTemplate_') 'Generated relationship documentation does not reference skipped Power BI date tables'
 
     # BuildOnly is valid for non-interactive UI structure tests. Production startup
     # must never show this returned form outside Show-PBIAutomateMainForm's scope.
