@@ -20,6 +20,7 @@ $modules = @(
     'src\Services\Alignment\AlignmentService.psm1',
     'src\Services\Analyse\Core\SemanticModelDiscovery.psm1',
     'src\Services\Analyse\Core\TmdlReader.psm1',
+    'src\Services\Analyse\Core\SourceInspector.psm1',
     'src\Services\Analyse\Core\MarkdownWriter.psm1',
     'src\Services\Analyse\AnalyseService.psm1',
     'src\UI\PreviewCanvas.psm1',
