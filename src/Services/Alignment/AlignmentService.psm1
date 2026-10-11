@@ -20,6 +20,23 @@ function Get-FirstRowVerticalOverlapRatio {
     return ($overlap / $baseHeight)
 }
 
+function Test-FirstRowRectOverlap {
+    param(
+        [Parameter(Mandatory=$true)][double]$X,
+        [Parameter(Mandatory=$true)][double]$Y,
+        [Parameter(Mandatory=$true)][double]$Width,
+        [Parameter(Mandatory=$true)][double]$Height,
+        [Parameter(Mandatory=$true)]$Other
+    )
+
+    return (
+        $X -lt ([double]$Other.X + [double]$Other.Width) -and
+        ($X + $Width) -gt [double]$Other.X -and
+        $Y -lt ([double]$Other.Y + [double]$Other.Height) -and
+        ($Y + $Height) -gt [double]$Other.Y
+    )
+}
+
 function New-FirstRowProposedItem {
     param(
         [Parameter(Mandatory=$true)]$Item,
@@ -131,6 +148,8 @@ function Get-FirstRowPbiLayout {
     $rowIds = @{}
     foreach ($item in $rowItems) { $rowIds[[string]$item.Id] = $true }
 
+    $nonRowItems = @($managed | Where-Object { -not $rowIds.ContainsKey([string]$_.Id) })
+
     $rowStartX = [Math]::Max($contentLeft,[double]$anchor.X)
     $rowY = [Math]::Max($contentTop,[double]$anchor.Y)
     $availableWidth = $contentRight - $rowStartX
@@ -172,20 +191,56 @@ function Get-FirstRowPbiLayout {
     $proposed = @()
     $cursorX = $rowStartX
     $rowOverlapFixCount = 0
+    $obstaclePushCount = 0
 
     for ($i = 0; $i -lt $rowItems.Count; $i++) {
         $item = $rowItems[$i]
         $targetWidth = [double]$widths[$i]
+        $targetX = $cursorX
 
-        if ($i -gt 0 -and [double]$item.X -lt ($cursorX - 0.001)) {
+        if ($i -gt 0 -and [double]$item.X -lt ($targetX - 0.001)) {
             $rowOverlapFixCount++
         }
 
-        $proposed += New-FirstRowProposedItem -Item $item -X $cursorX -Y $rowY -Width $targetWidth -Height ([double]$item.Height) -Column $i -Row 0
-        $cursorX += $targetWidth + $Gap
+        # Keep the first visual as the primary anchor. For every later row
+        # visual, if the desired position collides with an unchanged lower-row
+        # visual, push only this row visual to the obstacle's right edge + Gap.
+        if ($i -gt 0) {
+            for ($attempt = 0; $attempt -lt 20; $attempt++) {
+                $blockingRight = $null
+
+                foreach ($obstacle in $nonRowItems) {
+                    if (Test-FirstRowRectOverlap -X $targetX -Y $rowY -Width $targetWidth -Height ([double]$item.Height) -Other $obstacle) {
+                        $candidateRight = [double]$obstacle.X + [double]$obstacle.Width + $Gap
+                        if ($null -eq $blockingRight -or $candidateRight -gt [double]$blockingRight) {
+                            $blockingRight = $candidateRight
+                        }
+                    }
+                }
+
+                if ($null -eq $blockingRight) { break }
+                if ([double]$blockingRight -le ($targetX + 0.001)) { break }
+
+                $targetX = [double]$blockingRight
+                $obstaclePushCount++
+            }
+        }
+
+        # If obstacle pushing would exceed the right margin, fall back to the
+        # visual's current X when it is still inside the page. Validation will
+        # block Apply rather than silently create a bad layout.
+        if (($targetX + $targetWidth) -gt $contentRight) {
+            $originalX = [Math]::Max($contentLeft,[double]$item.X)
+            if (($originalX + $targetWidth) -le $contentRight) {
+                $targetX = $originalX
+            }
+        }
+
+        $proposed += New-FirstRowProposedItem -Item $item -X $targetX -Y $rowY -Width $targetWidth -Height ([double]$item.Height) -Column $i -Row 0
+        $cursorX = $targetX + $targetWidth + $Gap
     }
 
-    foreach ($item in @($managed | Where-Object { -not $rowIds.ContainsKey([string]$_.Id) })) {
+    foreach ($item in $nonRowItems) {
         $proposed += New-FirstRowProposedItem -Item $item -X ([double]$item.X) -Y ([double]$item.Y) -Width ([double]$item.Width) -Height ([double]$item.Height) -Column ([int]$item.Column) -Row ([int]$item.Row)
     }
 
@@ -208,6 +263,7 @@ function Get-FirstRowPbiLayout {
         FirstRowVisualCount = $rowItems.Count
         RowOverlapThreshold = $RowOverlapThreshold
         RowOverlapFixCount = $rowOverlapFixCount
+        ObstaclePushCount = $obstaclePushCount
         WidthScaledToFit = $widthScaled
         MaxAreaShareDeltaPercent = $null
         Items = $proposed
@@ -245,10 +301,6 @@ function Invoke-AlignmentPreview {
     try {
         $diagnostic = Resolve-PbiSnapshotOverlaps -PageSnapshot $PageSnapshot -InitialAnalysis $initialAnalysis -Margin $Margin -Gap $Gap
 
-        # Accept the resolver only when it is genuinely minimal: at most one
-        # visual moved, no visual resized, and no overlap remains. This keeps a
-        # simple source overlap fix while rejecting cascade cases such as one
-        # overlap causing 6 unrelated visuals to move.
         $safeMinimalFix = (
             [bool]$diagnostic.HadOverlaps -and
             [int]$diagnostic.MovedCount -le 1 -and
