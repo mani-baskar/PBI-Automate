@@ -23,11 +23,15 @@ $modules = @(
     'src\Services\Analyse\Core\MarkdownWriter.psm1',
     'src\Services\Analyse\AnalyseService.psm1',
     'src\UI\PreviewCanvas.psm1',
-    'src\UI\MainForm.psm1'
+    'src\UI\MainForm.psm1',
+    'src\Services\Analyse\AnalyseView.psm1'
 )
 
 foreach ($module in $modules) {
     Import-Module (Join-Path $root $module) -Force -ErrorAction Stop
 }
 
-Show-PBIAutomateMainForm -RootPath $root
+$form = Show-PBIAutomateMainForm -RootPath $root -BuildOnly
+Add-PbiAnalyseUi -Form $form -RootPath $root | Out-Null
+[void]$form.ShowDialog()
+$form.Dispose()
