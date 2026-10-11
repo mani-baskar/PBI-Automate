@@ -1,0 +1,43 @@
+name: Cleanup model analysis temp branches
+
+on:
+  push:
+    branches:
+      - dev/v1-model-analysis
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Delete temporary analysis branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            "dev/v1-model-analysis-check"
+            "dev/v1-model-analysis-final"
+            "dev/v1-model-analysis-impl"
+            "dev/v1-model-analysis-implementation"
+            "dev/v1-model-analysis-real"
+            "dev/v1-model-analysis-stage"
+            "dev/v1-model-analysis-temp"
+            "dev/v1-model-analysis-v2"
+            "dev/v1-model-analysis-work"
+          )
+
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              echo "Deleting $branch"
+              git push origin --delete "$branch"
+            else
+              echo "Already absent: $branch"
+            fi
+          done
