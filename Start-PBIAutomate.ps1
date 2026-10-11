@@ -32,7 +32,55 @@ foreach ($module in $modules) {
     Import-Module (Join-Path $root $module) -Force -ErrorAction Stop
 }
 
-$form = Show-PBIAutomateMainForm -RootPath $root -BuildOnly
-Add-PbiAnalyseUi -Form $form -RootPath $root | Out-Null
-[void]$form.ShowDialog()
-$form.Dispose()
+# Keep Show-PBIAutomateMainForm in its normal modal lifetime. Its WinForms event
+# handlers intentionally reference function-local scriptblocks such as
+# $loadProject. Returning the form with -BuildOnly and showing it later would
+# end that scope and break PBIP/Refresh events.
+#
+# Analyse is attached after the main form enters its message loop, while the
+# Show-PBIAutomateMainForm function is still alive. This preserves the proven
+# Alignment/PBIP lifecycle and lets Analyse extend the same software shell.
+$analyseAttached = $false
+$analyseAttachFailed = $false
+$attachTimer = New-Object System.Windows.Forms.Timer
+$attachTimer.Interval = 50
+
+$attachTimer.Add_Tick({
+    if ($analyseAttached -or $analyseAttachFailed) { return }
+
+    $mainForm = $null
+    foreach ($openForm in [System.Windows.Forms.Application]::OpenForms) {
+        if ([string]$openForm.Name -eq 'PBIAutomateMainForm') {
+            $mainForm = $openForm
+            break
+        }
+    }
+
+    if ($null -eq $mainForm) { return }
+
+    try {
+        Add-PbiAnalyseUi -Form $mainForm -RootPath $root | Out-Null
+        $analyseAttached = $true
+        $attachTimer.Stop()
+    }
+    catch {
+        $analyseAttachFailed = $true
+        $attachTimer.Stop()
+        [void][System.Windows.Forms.MessageBox]::Show(
+            $mainForm,
+            ('Analyse UI could not be attached: ' + $_.Exception.Message),
+            'PBI Automate - Analyse',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+    }
+}.GetNewClosure())
+
+$attachTimer.Start()
+try {
+    Show-PBIAutomateMainForm -RootPath $root
+}
+finally {
+    $attachTimer.Stop()
+    $attachTimer.Dispose()
+}
