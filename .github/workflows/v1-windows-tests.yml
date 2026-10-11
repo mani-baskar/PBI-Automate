@@ -42,3 +42,11 @@ jobs:
           Set-StrictMode -Version 2.0
           $ErrorActionPreference = 'Stop'
           .\tests\Run-Analyse-Tests.ps1
+
+      - name: Run Analyse source tests
+        if: ${{ github.ref == 'refs/heads/dev/v1-model-analysis' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        shell: powershell
+        run: |
+          Set-StrictMode -Version 2.0
+          $ErrorActionPreference = 'Stop'
+          .\tests\Run-Analyse-SourceTests.ps1
