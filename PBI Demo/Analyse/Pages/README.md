@@ -4,9 +4,6 @@
 
 | Page | Size | Total visuals | Active | Hidden | Groups |
 |---|---:|---:|---:|---:|---:|
-| Executive Overview | 1600 x 900 | 27 | 25 | 1 | 1 |
-| Policy & Product Performance | 1600 x 900 | 27 | 25 | 1 | 1 |
-| Customer & Geography | 1600 x 900 | 27 | 25 | 1 | 1 |
-| Distribution & Agent Performance | 1600 x 900 | 28 | 26 | 1 | 1 |
-| AI Lead Conversion | 1600 x 900 | 27 | 25 | 1 | 1 |
+| Page 1 | 1920 x 1080 | 13 | 13 | 0 | 0 |
+| Test | 1920 x 1080 | 13 | 13 | 0 | 0 |
 

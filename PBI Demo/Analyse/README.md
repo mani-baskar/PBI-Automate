@@ -1,16 +1,16 @@
 # PBI Automate Analyse
 
-Generated: 2026-10-12 00:55:13
+Generated: 2026-10-14 17:44:52
 
 | Item | Value |
 |---|---|
-| Report | InsuranceDemoSM |
-| Report folder | `D:\My Project\Power BI\Daiichi-Life-Demo-Report\PBIP\InsuranceDemoSM.Report` |
-| Semantic model | `D:\My Project\Power BI\Daiichi-Life-Demo-Report\PBIP\InsuranceDemoSM.SemanticModel` |
+| Report | Demo 1 |
+| Report folder | `D:\My Project\Power BI\PBI-Automate\PBI Demo\Demo 1.Report` |
+| Semantic model | `D:\My Project\Power BI\PBI-Automate\PBI Demo\Demo 1.SemanticModel` |
 | Semantic model detection | definition.pbir datasetReference.byPath |
-| Tables | 10 |
-| Relationships | 9 |
-| Pages | 5 |
+| Tables | 1 |
+| Relationships | 0 |
+| Pages | 2 |
 
 ## Contents
 
